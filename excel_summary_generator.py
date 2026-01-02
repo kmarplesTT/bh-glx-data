@@ -320,7 +320,7 @@ def paste_data_to_sheet(workbook, sheet_name, data_df):
 
 def update_pivot_table_source(workbook, pivot_sheet_name, data_sheet_name, data_range):
     """
-    Update pivot table data source in the specified sheet.
+    Update pivot table data source in the specified sheet and refresh the pivot table.
 
     Args:
         workbook (openpyxl.Workbook): Workbook object
@@ -344,7 +344,7 @@ def update_pivot_table_source(workbook, pivot_sheet_name, data_sheet_name, data_
             logger.warning(f"No pivot tables found in sheet '{pivot_sheet_name}'")
             return False
 
-        # Update each pivot table's data source
+        # Update each pivot table's data source and refresh
         updated_count = 0
         for pivot_table in sheet._pivots:
             try:
@@ -357,8 +357,20 @@ def update_pivot_table_source(workbook, pivot_sheet_name, data_sheet_name, data_
                         # Update the range and sheet name
                         ws_source.ref = data_range
                         ws_source.sheet = data_sheet_name
+
+                        # Refresh the pivot table cache
+                        # Mark the cache as needing refresh by updating its refreshOnLoad flag
+                        if hasattr(cache, 'refreshOnLoad'):
+                            cache.refreshOnLoad = True
+                        # Also try to invalidate the cache
+                        if hasattr(cache, 'refresh'):
+                            try:
+                                cache.refresh()
+                            except (AttributeError, TypeError):
+                                pass  # Some cache objects may not have refresh method
+
                         updated_count += 1
-                        logger.info(f"Updated pivot table data source to '{data_sheet_name}'!{data_range}")
+                        logger.info(f"Updated and refreshed pivot table data source to '{data_sheet_name}'!{data_range}")
             except Exception as e:
                 logger.warning(f"Could not update one pivot table: {e}")
                 continue
@@ -371,6 +383,51 @@ def update_pivot_table_source(workbook, pivot_sheet_name, data_sheet_name, data_
 
     except Exception as e:
         logger.error(f"Error updating pivot table source in sheet '{pivot_sheet_name}': {e}")
+        return False
+
+
+def refresh_pivot_tables(workbook, sheet_name):
+    """
+    Refresh all pivot tables in the specified sheet.
+
+    Args:
+        workbook (openpyxl.Workbook): Workbook object
+        sheet_name (str): Name of the sheet containing pivot tables
+
+    Returns:
+        bool: True if successful, False otherwise
+    """
+    if sheet_name not in workbook.sheetnames:
+        logger.warning(f"Sheet '{sheet_name}' not found, skipping pivot table refresh")
+        return False
+
+    try:
+        sheet = workbook[sheet_name]
+
+        if not hasattr(sheet, '_pivots') or not sheet._pivots:
+            logger.debug(f"No pivot tables found in sheet '{sheet_name}'")
+            return True  # Not an error, just no pivot tables
+
+        refreshed_count = 0
+        for pivot_table in sheet._pivots:
+            try:
+                cache = pivot_table.cache
+                if cache:
+                    # Set refreshOnLoad flag so Excel will refresh when opened
+                    if hasattr(cache, 'refreshOnLoad'):
+                        cache.refreshOnLoad = True
+                    refreshed_count += 1
+            except Exception as e:
+                logger.warning(f"Could not refresh one pivot table: {e}")
+                continue
+
+        if refreshed_count > 0:
+            logger.info(f"Marked {refreshed_count} pivot table(s) for refresh in sheet '{sheet_name}'")
+
+        return True
+
+    except Exception as e:
+        logger.error(f"Error refreshing pivot tables in sheet '{sheet_name}': {e}")
         return False
 
 
@@ -408,6 +465,8 @@ def generate_excel_summary(hostname, firmware_version, prbs_data, data_test_data
             # Update PRBS Summary pivot table if sheet exists
             if SHEET_PRBS_SUMMARY in workbook.sheetnames:
                 update_pivot_table_source(workbook, SHEET_PRBS_SUMMARY, SHEET_RAW_PRBS, prbs_range)
+                # Refresh pivot table
+                refresh_pivot_tables(workbook, SHEET_PRBS_SUMMARY)
             else:
                 logger.warning(f"Sheet '{SHEET_PRBS_SUMMARY}' not found, skipping pivot table update")
         else:
@@ -424,6 +483,8 @@ def generate_excel_summary(hostname, firmware_version, prbs_data, data_test_data
             # Update DATA Summary pivot table if sheet exists
             if SHEET_DATA_SUMMARY in workbook.sheetnames:
                 update_pivot_table_source(workbook, SHEET_DATA_SUMMARY, SHEET_RAW_DATA, data_range)
+                # Refresh pivot table
+                refresh_pivot_tables(workbook, SHEET_DATA_SUMMARY)
             else:
                 logger.warning(f"Sheet '{SHEET_DATA_SUMMARY}' not found, skipping pivot table update")
         else:

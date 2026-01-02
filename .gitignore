@@ -9,7 +9,9 @@ ENV/
 
 # Downloaded CSV data
 data/
+summaries/
 *.csv
+~*
 
 # Python cache
 __pycache__/
