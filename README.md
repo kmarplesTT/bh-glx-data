@@ -50,6 +50,27 @@ View help for usage instructions
 python jira_csv_retriever.py --help
 ```
 
+### Excel Summary Generation
+
+After downloading CSV files, use the Excel summary generator to create organized Excel files with pivot tables:
+
+The script will:
+
+1. Scan all CSV files in the `data/` directory
+2. Group files by system hostname and firmware version
+3. Separate PRBS and Data test types
+4. Compile data from multiple CSV files for each system+firmware combination
+5. Generate Excel files using the `system_data_template.xlsx` template
+6. Update pivot table data sources automatically
+7. Save output files to the `summaries/` directory
+View help for usage instructions:
+
+```bash
+python excel_summary_generator.py --help
+```
+
+Output files are named `{hostname}_{firmware_version}.xlsx` (e.g., `bh-glx-b02u02_erisc_v1_7_103.xlsx`)
+
 ## Project Structure
 
 ```text
@@ -61,10 +82,13 @@ data_collection/
 ├── requirements.txt     # Python dependencies
 ├── README.md            # Project documentation
 ├── jira_csv_retriever.py # Main script to retrieve CSV files from Jira
+├── excel_summary_generator.py # Script to generate Excel summaries from CSV data
+├── system_data_template.xlsx # Excel template with pivot tables
 ├── data_analyzer.py     # Module for analyzing CSV data and finding patterns
 ├── report_generator.py  # Module for generating debug reports
 ├── config.py            # Configuration management
-└── data/                # Directory for downloaded CSV files (gitignored)
+├── data/                # Directory for downloaded CSV files (gitignored)
+└── summaries/            # Directory for generated Excel summary files (gitignored)
 ```
 
 ## Security
