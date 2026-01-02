@@ -13,8 +13,8 @@ load_dotenv()
 
 # Jira Configuration (from .env)
 JIRA_SERVER_URL = os.getenv('JIRA_SERVER_URL')
-JIRA_USERNAME = os.getenv('JIRA_USERNAME')
-JIRA_PASSWORD = os.getenv('JIRA_PASSWORD')
+EMAIL = os.getenv('EMAIL')
+API_KEY = os.getenv('API_KEY')
 
 # Load configuration from config.yaml
 CONFIG_YAML_PATH = Path('config.yaml')
@@ -63,10 +63,10 @@ def validate_config():
 
     if not JIRA_SERVER_URL:
         missing.append('JIRA_SERVER_URL')
-    if not JIRA_USERNAME:
-        missing.append('JIRA_USERNAME')
-    if not JIRA_PASSWORD:
-        missing.append('JIRA_PASSWORD')
+    if not EMAIL:
+        missing.append('EMAIL')
+    if not API_KEY:
+        missing.append('API_KEY')
     if missing:
         raise ValueError(
             f"Missing required configuration: {', '.join(missing)}. "

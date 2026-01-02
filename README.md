@@ -1,4 +1,4 @@
-# Jira CSV Data Analysis Tool
+# BH Galaxy Data Analysis Tool
 
 A Python tool to collect and analyze csv data from Jira for BH Galaxy system tests
 
@@ -22,8 +22,8 @@ Edit `.env` and add your Jira credentials:
 
 ```env
 JIRA_SERVER_URL=https://your-jira-instance.atlassian.net
-JIRA_USERNAME=your-email@example.com
-JIRA_PASSWORD=your-api-token-or-password
+EMAIL=your-email@example.com
+API_KEY=your-api-token
 ```
 
 **Note**: For Jira Cloud, you'll need to use an [API token](https://support.atlassian.com/atlassian-account/docs/manage-api-tokens-for-your-atlassian-account/) instead of your password.
@@ -94,5 +94,5 @@ data_collection/
 
 ## Requirements
 
-- Python 3.7+
+- Python 3.10+
 - Jira account with appropriate permissions to access tickets and attachments

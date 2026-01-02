@@ -33,7 +33,7 @@ def initialize_jira_client():
     try:
         jira = JIRA(
             server=config.JIRA_SERVER_URL,
-            basic_auth=(config.JIRA_USERNAME, config.JIRA_PASSWORD)
+            basic_auth=(config.EMAIL, config.API_KEY)
         )
         logger.info(f"Successfully authenticated with Jira at {config.JIRA_SERVER_URL}")
         return jira
@@ -189,7 +189,7 @@ Examples:
         """
     )
     parser.add_argument(
-        'tickets',
+        '--tickets',
         nargs='*',
         help='Jira ticket key(s) to process (e.g., SYS-2826). If not provided, uses tickets from config.yaml'
     )
@@ -213,10 +213,10 @@ def main():
             # Only validate Jira connection settings, not ticket keys
             if not config.JIRA_SERVER_URL:
                 raise ValueError('JIRA_SERVER_URL is missing')
-            if not config.JIRA_USERNAME:
-                raise ValueError('JIRA_USERNAME is missing')
-            if not config.JIRA_PASSWORD:
-                raise ValueError('JIRA_PASSWORD is missing')
+            if not config.EMAIL:
+                raise ValueError('EMAIL is missing')
+            if not config.API_KEY:
+                raise ValueError('API_KEY is missing')
         except ValueError as e:
             logger.error(f"Configuration error: {e}")
             sys.exit(1)
