@@ -1,0 +1,5 @@
+# Configuraiton file
+# List of Jira ticket keys to process for CSV data collection
+tickets:
+  - SYS-2826
+  - SYS-2827
