@@ -82,7 +82,6 @@ def find_csv_attachments(issue):
         list: List of attachment objects that are CSV files
     """
     csv_attachments = []
-
     if not hasattr(issue.fields, 'attachment') or not issue.fields.attachment:
         return csv_attachments
 

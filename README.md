@@ -44,25 +44,7 @@ The script will:
 4. Download CSV files to the `data/` directory
 5. Display a summary of results
 
-**Process all tickets listed under `tickets` in `config.yaml`**
-
-```bash
-python jira_csv_retriever.py
-```
-
-**Process a single ticket:**
-
-```bash
-python jira_csv_retriever.py SYS-2826
-```
-
-**Process multiple tickets:**
-
-```bash
-python jira_csv_retriever.py SYS-2826 SYS-2827 SYS-2828
-```
-
-**View help:**
+View help for usage instructions
 
 ```bash
 python jira_csv_retriever.py --help
