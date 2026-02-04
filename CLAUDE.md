@@ -1,0 +1,153 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Project Overview
+
+BH Galaxy Data Analysis Tool - A Python tool for collecting CSV test data from Jira tickets and generating Excel summary reports with pivot tables for system test analysis.
+
+The tool operates in two stages:
+
+1. **Data Collection**: Download CSV attachments from Jira tickets
+2. **Report Generation**: Process CSV data and generate Excel summaries organized by system hostname and firmware version
+
+## Development Setup
+
+```bash
+# Install dependencies
+pip install -r requirements.txt
+
+# Configure credentials (required for Jira access)
+cp .env.example .env
+# Edit .env with your Jira credentials:
+#   JIRA_SERVER_URL, EMAIL, API_KEY
+
+# Configure ticket list
+# Edit config.yaml to add Jira ticket keys
+```
+
+## Common Commands
+
+### Data Collection from Jira
+
+```bash
+# Download CSV files from tickets in config.yaml
+python src/jira_csv_retriever.py
+
+# Download from specific tickets (bypasses config.yaml)
+python src/jira_csv_retriever.py --tickets SYS-2826 SYS-2827
+
+# View help
+python src/jira_csv_retriever.py --help
+```
+
+### Excel Summary Generation
+
+```bash
+# Generate Excel summaries for all systems in data/
+python src/excel_summary_generator.py
+
+# Generate for specific systems only
+python src/excel_summary_generator.py --systems bh-glx-b02u02 bh-glx-b03u02
+
+# View help
+python src/excel_summary_generator.py --help
+```
+
+## Architecture
+
+### Data Pipeline Flow
+
+1. **Jira Retrieval** (`src/jira_csv_retriever.py`)
+   - Authenticates with Jira using credentials from `.env`
+   - Reads ticket keys from `config.yaml` (or CLI args)
+   - Downloads CSV attachments to `data/` directory
+   - Files named as: `{TICKET_KEY}_{ATTACHMENT_NAME}.csv`
+
+2. **Excel Generation** (`src/excel_summary_generator.py`)
+   - Scans `data/` directory for CSV files
+   - Extracts metadata from filenames and CSV content:
+     - System hostname from `host` column
+     - Firmware version from filename pattern (e.g., `erisc_v1_7_103`)
+     - Test type from `test_type` column (`PRBS` vs `DATA`)
+   - Groups files by (hostname, firmware_version, test_type)
+   - Compiles data for each group by concatenating all matching CSVs
+   - Generates Excel files using `templates/system_data_template.xlsx` template
+   - Updates pivot table data sources and marks for refresh
+   - Saves to `summaries/{hostname}_{firmware_version}.xlsx`
+
+### Key Modules
+
+- **src/config.py**: Configuration loader
+  - Loads Jira credentials from `.env` via python-dotenv
+  - Loads ticket list from `config.yaml` via PyYAML
+  - Validates required configuration
+  - Creates `data/` output directory
+
+- **src/jira_csv_retriever.py**: Jira data collection
+  - Uses `jira` library for API access
+  - Downloads only CSV attachments
+  - Handles authentication errors and missing tickets gracefully
+
+- **src/excel_summary_generator.py**: Excel report generator
+  - Uses `pandas` for CSV reading and data manipulation
+  - Uses `openpyxl` for Excel file operations
+  - Handles pivot table source updates via openpyxl's private `_pivots` attribute
+  - Template structure (in `templates/system_data_template.xlsx`):
+    - `raw prbs data` sheet: PRBS test data
+    - `raw data` sheet: Data test data
+    - `PRBS Summary` sheet: Pivot table for PRBS
+    - `DATA Summary` sheet: Pivot table for Data tests
+
+- **src/platform_topology.py**: Platform topology mapping
+  - Maps Ethernet port connections between PCIe devices
+  - Can be used as CLI tool or imported as module
+  - Provides connection lookup and validation functions
+
+### Test Type Identification
+
+The system recognizes two test types based on the `test_type` column:
+
+- `TestType.SERDES_PRBS` → PRBS tests
+- `TestType.SIMPLE_PACKET` → Data tests
+
+Fallback: If `test_type` column is missing, uses filename patterns (`prbs_test`, `data_test`).
+
+### File Naming Conventions
+
+**Input CSV files** (from Jira):
+
+- Format: `{TICKET_KEY}_{original_filename}.csv`
+- Must contain firmware version pattern in filename (e.g., `erisc_v1_7_103` or `v1_7_103`)
+- Must have `host` column with system hostname
+- Must have `test_type` column with test type identifier
+
+**Output Excel files**:
+
+- Format: `{hostname}_{firmware_version}.xlsx`
+- Example: `bh-glx-b02u02_erisc_v1_7_103.xlsx`
+
+## Important Notes
+
+- Credentials in `.env` are gitignored and never committed
+- `config.yaml` contains only ticket keys (no secrets) and is committed
+- `data/` and `summaries/` directories are gitignored
+- Python 3.10+ required
+- Use `python3` when running Python scripts
+- Virtual environment is stored in `.venv/`
+- Uses logging at INFO level by default for operational visibility
+
+### Hardware Information
+
+- The hardware being tested is a platform consisting of 32 chips (PCIe devices) with 14 Ethernet ports on each chip, 4 of which are unused (ETH5, ETH8, ETH12, and ETH13)
+- Each Ethernet port (ETH##) is connected to another Ethernet port on the platform
+
+### Notes for Parsing CSV data
+
+- Headings for each column are in the first row
+- The 'bus_id' should be used to identify the PCIe device (chip), not the 'interface'
+- Use `src/platform_topology.py` to understand Ethernet port connections between chips:
+  - Import the module: `from src.platform_topology import get_connected_port, get_all_connections_for_device, PLATFORM_TOPOLOGY`
+  - Query connections programmatically: `get_connected_port("01:00.0", "ETH07")` returns the connected bus_id and ETH port
+  - Get all connections for a device: `get_all_connections_for_device("01:00.0")`
+  - The topology maps all ETH port connections across the 4 UBBs (32 chips total)
