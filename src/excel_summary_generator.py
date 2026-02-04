@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 # Constants
 DATA_DIR = Path('data')
-TEMPLATE_PATH = Path('system_data_template.xlsx')
+TEMPLATE_PATH = Path('templates/system_data_template.xlsx')
 OUTPUT_DIR = Path('summaries')
 
 # Test type constants

@@ -47,7 +47,7 @@ The script will:
 View help for usage instructions
 
 ```bash
-python jira_csv_retriever.py --help
+python src/jira_csv_retriever.py --help
 ```
 
 ### Excel Summary Generation
@@ -66,29 +66,51 @@ The script will:
 View help for usage instructions:
 
 ```bash
-python excel_summary_generator.py --help
+python src/excel_summary_generator.py --help
 ```
 
 Output files are named `{hostname}_{firmware_version}.xlsx` (e.g., `bh-glx-b02u02_erisc_v1_7_103.xlsx`)
 
+### Platform Topology Utility
+
+Query the ETH port connectivity between chips (PCIe devices) on the BH Galaxy platform. The platform consists of 4 UBBs with 8 chips each (U1-U8), where each chip has 14 ETH ports.
+
+```bash
+# Query a specific connection
+python src/platform_topology.py 01:00.0 ETH07
+
+# Show all connections for a device
+python src/platform_topology.py 01:00.0 --all
+
+# View detailed help and examples
+python src/platform_topology.py --help
+```
+
+The utility can be used as a CLI tool or imported as a Python module for programmatic access to the topology data.
+
 ## Project Structure
 
 ```text
-data_collection/
-├── .env.example          # Template for environment variables (safe to commit)
-├── .env                  # Actual credentials (gitignored - never committed)
-├── config.yaml           # Ticket list and configuration (safe to commit)
-├── .gitignore           # Ignore virtual env, .env, and downloaded files
-├── requirements.txt     # Python dependencies
-├── README.md            # Project documentation
-├── jira_csv_retriever.py # Main script to retrieve CSV files from Jira
-├── excel_summary_generator.py # Script to generate Excel summaries from CSV data
-├── system_data_template.xlsx # Excel template with pivot tables
-├── data_analyzer.py     # Module for analyzing CSV data and finding patterns
-├── report_generator.py  # Module for generating debug reports
-├── config.py            # Configuration management
-├── data/                # Directory for downloaded CSV files (gitignored)
-└── summaries/            # Directory for generated Excel summary files (gitignored)
+bh-glx-data/
+├── src/                          # Source code
+│   ├── __init__.py
+│   ├── config.py                 # Configuration management
+│   ├── jira_csv_retriever.py    # Script to retrieve CSV files from Jira
+│   ├── excel_summary_generator.py # Script to generate Excel summaries
+│   ├── platform_topology.py     # Platform connectivity mapping
+│   └── validate_topology.py     # Topology validation utility
+├── templates/                    # Excel templates
+│   └── system_data_template.xlsx # Template with pivot tables
+├── docs/                         # Documentation and diagrams
+├── data/                         # Downloaded CSV files (gitignored)
+├── summaries/                    # Generated Excel reports (gitignored)
+├── .env.example                  # Template for environment variables
+├── .env                          # Actual credentials (gitignored)
+├── config.yaml                   # Ticket list configuration
+├── requirements.txt              # Python dependencies
+├── README.md                     # Project documentation
+├── CLAUDE.md                     # Instructions for Claude Code
+└── .gitignore                    # Git ignore rules
 ```
 
 ## Security
