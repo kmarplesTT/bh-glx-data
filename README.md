@@ -47,7 +47,7 @@ The script will:
 View help for usage instructions
 
 ```bash
-python src/jira_csv_retriever.py --help
+python3 src/jira_csv_retriever.py --help
 ```
 
 ### Excel Summary Generation
@@ -66,7 +66,7 @@ The script will:
 View help for usage instructions:
 
 ```bash
-python src/excel_summary_generator.py --help
+python3 src/excel_summary_generator.py --help
 ```
 
 Output files are named `{hostname}_{firmware_version}.xlsx` (e.g., `bh-glx-b02u02_erisc_v1_7_103.xlsx`)
@@ -77,13 +77,13 @@ Query the ETH port connectivity between chips (PCIe devices) on the BH Galaxy pl
 
 ```bash
 # Query a specific connection
-python src/platform_topology.py 01:00.0 ETH07
+python3 src/platform_topology.py 01:00.0 ETH07
 
 # Show all connections for a device
-python src/platform_topology.py 01:00.0 --all
+python3 src/platform_topology.py 01:00.0 --all
 
 # View detailed help and examples
-python src/platform_topology.py --help
+python3 src/platform_topology.py --help
 ```
 
 The utility can be used as a CLI tool or imported as a Python module for programmatic access to the topology data.
