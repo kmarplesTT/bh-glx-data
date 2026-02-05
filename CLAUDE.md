@@ -32,39 +32,39 @@ cp .env.example .env
 
 ```bash
 # Download CSV files from tickets in config.yaml
-python src/jira_csv_retriever.py
+python jira_csv_retriever.py
 
 # Download from specific tickets (bypasses config.yaml)
-python src/jira_csv_retriever.py --tickets SYS-2826 SYS-2827
+python jira_csv_retriever.py --tickets SYS-2826 SYS-2827
 
 # View help
-python src/jira_csv_retriever.py --help
+python jira_csv_retriever.py --help
 ```
 
 ### Excel Summary Generation
 
 ```bash
 # Generate Excel summaries for all systems in data/
-python src/excel_summary_generator.py
+python excel_summary_generator.py
 
 # Generate for specific systems only
-python src/excel_summary_generator.py --systems bh-glx-b02u02 bh-glx-b03u02
+python excel_summary_generator.py --systems bh-glx-b02u02 bh-glx-b03u02
 
 # View help
-python src/excel_summary_generator.py --help
+python excel_summary_generator.py --help
 ```
 
 ## Architecture
 
 ### Data Pipeline Flow
 
-1. **Jira Retrieval** (`src/jira_csv_retriever.py`)
+1. **Jira Retrieval** (`jira_csv_retriever.py`)
    - Authenticates with Jira using credentials from `.env`
    - Reads ticket keys from `config.yaml` (or CLI args)
    - Downloads CSV attachments to `data/` directory
    - Files named as: `{TICKET_KEY}_{ATTACHMENT_NAME}.csv`
 
-2. **Excel Generation** (`src/excel_summary_generator.py`)
+2. **Excel Generation** (`excel_summary_generator.py`)
    - Scans `data/` directory for CSV files
    - Extracts metadata from filenames and CSV content:
      - System hostname from `host` column
@@ -72,37 +72,32 @@ python src/excel_summary_generator.py --help
      - Test type from `test_type` column (`PRBS` vs `DATA`)
    - Groups files by (hostname, firmware_version, test_type)
    - Compiles data for each group by concatenating all matching CSVs
-   - Generates Excel files using `templates/system_data_template.xlsx` template
+   - Generates Excel files using `system_data_template.xlsx` template
    - Updates pivot table data sources and marks for refresh
    - Saves to `summaries/{hostname}_{firmware_version}.xlsx`
 
 ### Key Modules
 
-- **src/config.py**: Configuration loader
+- **config.py**: Configuration loader
   - Loads Jira credentials from `.env` via python-dotenv
   - Loads ticket list from `config.yaml` via PyYAML
   - Validates required configuration
   - Creates `data/` output directory
 
-- **src/jira_csv_retriever.py**: Jira data collection
+- **jira_csv_retriever.py**: Jira data collection
   - Uses `jira` library for API access
   - Downloads only CSV attachments
   - Handles authentication errors and missing tickets gracefully
 
-- **src/excel_summary_generator.py**: Excel report generator
+- **excel_summary_generator.py**: Excel report generator
   - Uses `pandas` for CSV reading and data manipulation
   - Uses `openpyxl` for Excel file operations
   - Handles pivot table source updates via openpyxl's private `_pivots` attribute
-  - Template structure (in `templates/system_data_template.xlsx`):
+  - Template structure:
     - `raw prbs data` sheet: PRBS test data
     - `raw data` sheet: Data test data
     - `PRBS Summary` sheet: Pivot table for PRBS
     - `DATA Summary` sheet: Pivot table for Data tests
-
-- **src/platform_topology.py**: Platform topology mapping
-  - Maps Ethernet port connections between PCIe devices
-  - Can be used as CLI tool or imported as module
-  - Provides connection lookup and validation functions
 
 ### Test Type Identification
 
@@ -136,6 +131,7 @@ Fallback: If `test_type` column is missing, uses filename patterns (`prbs_test`,
 - Use `python3` when running Python scripts
 - Virtual environment is stored in `.venv/`
 - Uses logging at INFO level by default for operational visibility
+- Usage documentation can be found in @README.md
 
 ### Hardware Information
 
@@ -146,8 +142,10 @@ Fallback: If `test_type` column is missing, uses filename patterns (`prbs_test`,
 
 - Headings for each column are in the first row
 - The 'bus_id' should be used to identify the PCIe device (chip), not the 'interface'
-- Use `src/platform_topology.py` to understand Ethernet port connections between chips:
-  - Import the module: `from src.platform_topology import get_connected_port, get_all_connections_for_device, PLATFORM_TOPOLOGY`
+- Use @platform_topology.py to understand Ethernet port connections between chips:
+  - Import the module: `from platform_topology import get_connected_port, get_all_connections_for_device, PLATFORM_TOPOLOGY`
   - Query connections programmatically: `get_connected_port("01:00.0", "ETH07")` returns the connected bus_id and ETH port
   - Get all connections for a device: `get_all_connections_for_device("01:00.0")`
   - The topology maps all ETH port connections across the 4 UBBs (32 chips total)
+- Ethernet ports that connect to cable connectors are routed to other ports that are connected to cable connectors.
+  - Try and infer based on failure data which Ethernet ports match up with each other (e.g., cable connector ports that fail on the same run)

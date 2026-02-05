@@ -8,15 +8,37 @@ Bus ID format: XY:00.0 where:
 - X = UBB identifier (0=UBB1, 4=UBB2, c=UBB3, 8=UBB4)
 - Y = Chip number (1-8 for U1-U8)
 
-Each chip has 14 ETH ports (ETH0-ETH13), with ETH12 and ETH13 unused.
+Each chip has 14 ETH ports (ETH00-ETH13):
+- ETH05, ETH08: Unused (not physically present) on all chips
+- ETH12, ETH13: Unconnected (not used) on all chips
+- Cable connector and platform-connected ports vary by chip position (U1-U8)
+  See CABLE_CONNECTOR_PORTS_BY_CHIP and PLATFORM_TOPOLOGY for details
 """
 
-from typing import Dict, Tuple, Optional
+from typing import Dict, Tuple, Optional, Set
 
 # Type aliases for clarity
 BusId = str  # Format: "XY:00.0"
 EthPort = str  # Format: "ETHX"
 Connection = Tuple[BusId, EthPort]  # (bus_id, eth_port)
+
+# Port categories
+UNUSED_PORTS: Set[str] = {"ETH05", "ETH08"}  # Not physically present
+UNCONNECTED_PORTS: Set[str] = {"ETH12", "ETH13"}  # Not used
+ALL_VALID_PORTS: Set[str] = {f"ETH{i:02d}" for i in range(14)}  # ETH00-ETH13
+
+# Cable connector ports by chip position (U1-U8)
+# These ports connect to external cables, not to other chips on the platform
+CABLE_CONNECTOR_PORTS_BY_CHIP: Dict[int, Set[str]] = {
+    1: {"ETH00", "ETH01", "ETH02", "ETH03", "ETH10", "ETH11"},
+    2: {"ETH00", "ETH01", "ETH10", "ETH11"},
+    3: {"ETH00", "ETH01", "ETH10", "ETH11"},
+    4: {"ETH00", "ETH01", "ETH10", "ETH11"},
+    5: {"ETH02", "ETH03", "ETH10", "ETH11"},
+    6: {"ETH10", "ETH11"},
+    7: {"ETH10", "ETH11"},
+    8: {"ETH10", "ETH11"},
+}
 
 # Platform topology mapping
 # Key: (source_bus_id, source_eth_port)
@@ -267,13 +289,43 @@ PLATFORM_TOPOLOGY: Dict[Connection, Connection] = {
 }
 
 
+def get_port_status(bus_id: str, eth_port: str) -> str:
+    """
+    Determine the status/category of an ETH port for a specific device.
+
+    Args:
+        bus_id: Device bus ID (e.g., "01:00.0")
+        eth_port: ETH port in normalized format (e.g., "ETH07")
+
+    Returns:
+        String describing the port status: "unused", "unconnected", "cable_connector",
+        "platform_connected", or "invalid"
+    """
+    if eth_port not in ALL_VALID_PORTS:
+        return "invalid"
+
+    if eth_port in UNUSED_PORTS:
+        return "unused"
+
+    if eth_port in UNCONNECTED_PORTS:
+        return "unconnected"
+
+    # Check if this port is a cable connector for this specific chip
+    chip_num = get_chip_from_bus_id(bus_id)
+    cable_ports = CABLE_CONNECTOR_PORTS_BY_CHIP.get(chip_num, set())
+    if eth_port in cable_ports:
+        return "cable_connector"
+
+    return "platform_connected"
+
+
 def get_connected_port(bus_id: str, eth_port: str) -> Optional[Connection]:
     """
     Get the connected device and port for a given source device and port.
 
     Args:
         bus_id: Source bus ID (e.g., "01:00.0")
-        eth_port: Source ETH port (e.g., "ETH7")
+        eth_port: Source ETH port (e.g., "ETH07")
 
     Returns:
         Tuple of (connected_bus_id, connected_eth_port) or None if not found
@@ -404,6 +456,16 @@ Examples:
 
   # Bidirectional lookup
   %(prog)s 05:00.0 ETH00 --bidirectional
+
+ETH Port Categories:
+  Each chip has 14 ports (ETH00-ETH13). Port purposes vary by chip position:
+  - ETH05, ETH08: Unused (not physically present) on all chips
+  - ETH12, ETH13: Unconnected (not used) on all chips
+  - Platform connections and cable connectors vary by chip (U1-U8):
+    * U1: ETH04,06,07,09 (platform), ETH00,01,02,03,10,11 (cable)
+    * U2-U4: ETH02,03,04,06,07,09 (platform), ETH00,01,10,11 (cable)
+    * U5: ETH00,01,04,06,07,09 (platform), ETH02,03,10,11 (cable)
+    * U6-U8: ETH00,01,02,03,04,06,07,09 (platform), ETH10,11 (cable)
         """
     )
 
@@ -477,7 +539,27 @@ Examples:
         connected = get_connected_port(bus_id, eth_port)
 
         if not connected:
-            print(f"Error: No connection found for {bus_id} {eth_port}", file=sys.stderr)
+            # Determine why no connection was found and provide informative message
+            port_status = get_port_status(bus_id, eth_port)
+
+            if port_status == "invalid":
+                print(f"Error: Invalid ETH port '{eth_port}'. Valid ports are ETH00-ETH13.", file=sys.stderr)
+            elif port_status == "unused":
+                print(f"No connection for {bus_id} {eth_port}: Port is unused (not physically present).", file=sys.stderr)
+                print("  Note: ETH05 and ETH08 are not present on the hardware.", file=sys.stderr)
+            elif port_status == "unconnected":
+                print(f"No connection for {bus_id} {eth_port}: Port is unconnected (not used).", file=sys.stderr)
+                print("  Note: ETH12 and ETH13 are not connected on the platform.", file=sys.stderr)
+            elif port_status == "cable_connector":
+                chip_num = get_chip_from_bus_id(bus_id)
+                cable_ports = sorted(CABLE_CONNECTOR_PORTS_BY_CHIP.get(chip_num, set()))
+                print(f"No connection for {bus_id} {eth_port}: Port is connected to external cable connector.", file=sys.stderr)
+                print(f"  Note: Chip U{chip_num} cable connector ports: {', '.join(cable_ports)}", file=sys.stderr)
+            else:
+                # Should be in topology but isn't - this is unexpected
+                print(f"Error: No connection found for {bus_id} {eth_port}", file=sys.stderr)
+                print("  This may indicate missing topology data.", file=sys.stderr)
+
             sys.exit(1)
 
         dest_bus, dest_port = connected
