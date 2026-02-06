@@ -137,6 +137,7 @@ Fallback: If `test_type` column is missing, uses filename patterns (`prbs_test`,
 
 - The hardware being tested is a platform consisting of 32 chips (PCIe devices) with 14 Ethernet ports on each chip, 4 of which are unused (ETH5, ETH8, ETH12, and ETH13)
 - Each Ethernet port (ETH##) is connected to another Ethernet port on the platform
+- 2 ETH ports share a Serdes so one will always act as "Lead" and the other "Follower". The pairs are (Lead, Follow): (ETH00, ETH01), (ETH02, ETH03), (ETH04, ETH06), (ETH09, ETH07), (ETH11, ETH10).
 
 ### Notes for Parsing CSV data
 
@@ -149,3 +150,5 @@ Fallback: If `test_type` column is missing, uses filename patterns (`prbs_test`,
   - The topology maps all ETH port connections across the 4 UBBs (32 chips total)
 - Ethernet ports that connect to cable connectors are routed to other ports that are connected to cable connectors.
   - Try and infer based on failure data which Ethernet ports match up with each other (e.g., cable connector ports that fail on the same run)
+- For PRBS tests, refer to @docs/golden_prbs.csv for an example of a clean run with all used ports on all chips passing
+- For Data tests, refer to @docs/golden_data.csv for an example of a clean run with all used ports on all chips passing
