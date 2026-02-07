@@ -7,9 +7,10 @@ ENV/
 # Environment variables with credentials
 .env
 
-# Downloaded CSV data
+# Data directories
 data/
 summaries/
+quanta/
 ~*
 
 # Python cache

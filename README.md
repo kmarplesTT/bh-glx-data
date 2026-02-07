@@ -1,6 +1,6 @@
 # BH Galaxy Data Analysis Tool
 
-A Python tool to collect and analyze csv data from Jira for BH Galaxy system tests
+A collection of Python tools to collect and analyze test data for BH Galaxy system tests, including Jira CSV retrieval, Quanta failure data extraction, and Excel report generation
 
 ## Setup
 
@@ -88,6 +88,45 @@ python3 src/platform_topology.py --help
 
 The utility can be used as a CLI tool or imported as a Python module for programmatic access to the topology data.
 
+### Quanta Failure Data Extraction
+
+Extract test data (CSV files) for failed systems from Quanta QC3 test packages. Quanta is the manufacturing partner that provides QC3 test results in zip file packages. This tool automates the process of:
+
+1. Unzipping QC3 test packages
+2. Analyzing Excel results to identify systems with failures
+3. Extracting test CSV files from nested tar.gz archives
+4. Organizing output by system serial number
+
+```bash
+# Extract failure data from a QC3 test package
+python3 src/extract_quanta_failures.py QC3_UBB_20260128_build.zip
+
+# Specify custom output directory
+python3 src/extract_quanta_failures.py QC3_UBB_20260128_build.zip --output-dir my_failures/
+
+# View help
+python3 src/extract_quanta_failures.py --help
+```
+
+The tool will:
+- Scan the Excel file (e.g., `QC3_S7TK_0128_build_test.xlsx`) for non-zero failure counts
+- Find directories matching the failed serial numbers
+- Extract `data_test_*.csv` and `prbs_test_*.csv` files from nested archives
+- Save files to `quanta/` directory (default) with descriptive names
+
+**File Organization:**
+```
+QC3_*.zip
+├── QC3_*_test.xlsx                   (analyzed for failures)
+└── 0130/{SN1}_{SN2}_{SN3}_{SN4}/
+    └── QC3_UBB_*.tar.gz
+        └── tt_funtest_ubb_*/
+            └── ft_eth_stress_*.tar.gz
+                └── ft_eth_stress/
+                    ├── data_test_*.csv  (extracted)
+                    └── prbs_test_*.csv  (extracted)
+```
+
 ## Project Structure
 
 ```text
@@ -97,13 +136,16 @@ bh-glx-data/
 │   ├── config.py                 # Configuration management
 │   ├── jira_csv_retriever.py    # Script to retrieve CSV files from Jira
 │   ├── excel_summary_generator.py # Script to generate Excel summaries
-│   ├── platform_topology.py     # Platform connectivity mapping
-│   └── validate_topology.py     # Topology validation utility
+│   ├── extract_quanta_failures.py # Script to extract failure data from QC3 packages
+│   ├── analyze_failures.py       # Analyze Excel files for failures
+│   ├── platform_topology.py      # Platform connectivity mapping
+│   └── validate_topology.py      # Topology validation utility
 ├── templates/                    # Excel templates
 │   └── system_data_template.xlsx # Template with pivot tables
 ├── docs/                         # Documentation and diagrams
-├── data/                         # Downloaded CSV files (gitignored)
+├── data/                         # Downloaded CSV files from Jira (gitignored)
 ├── summaries/                    # Generated Excel reports (gitignored)
+├── quanta/                       # Extracted Quanta failure CSV files (gitignored)
 ├── .env.example                  # Template for environment variables
 ├── .env                          # Actual credentials (gitignored)
 ├── config.yaml                   # Ticket list configuration

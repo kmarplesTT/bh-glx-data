@@ -4,12 +4,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-BH Galaxy Data Analysis Tool - A Python tool for collecting CSV test data from Jira tickets and generating Excel summary reports with pivot tables for system test analysis.
+BH Galaxy Data Analysis Tool - A collection of Python tools for analyzing test data for BH Galaxy systems.
 
-The tool operates in two stages:
+The toolset includes:
 
-1. **Data Collection**: Download CSV attachments from Jira tickets
-2. **Report Generation**: Process CSV data and generate Excel summaries organized by system hostname and firmware version
+1. **Data Collection from Jira**: Download CSV test data attachments from Jira tickets
+2. **Quanta Failure Data Extraction**: Extract CSV test data for failed systems from Quanta QC3 test packages (received from manufacturing partner)
+3. **Report Generation**: Process CSV data and generate Excel summaries organized by system hostname and firmware version
 
 ## Development Setup
 
@@ -54,6 +55,19 @@ python excel_summary_generator.py --systems bh-glx-b02u02 bh-glx-b03u02
 python excel_summary_generator.py --help
 ```
 
+### Quanta Failure Data Extraction
+
+```bash
+# Extract failure data from Quanta QC3 test package
+python extract_quanta_failures.py QC3_UBB_20260128_build.zip
+
+# Specify custom output directory
+python extract_quanta_failures.py QC3_UBB_20260128_build.zip --output-dir custom_dir/
+
+# View help
+python extract_quanta_failures.py --help
+```
+
 ## Architecture
 
 ### Data Pipeline Flow
@@ -64,7 +78,17 @@ python excel_summary_generator.py --help
    - Downloads CSV attachments to `data/` directory
    - Files named as: `{TICKET_KEY}_{ATTACHMENT_NAME}.csv`
 
-2. **Excel Generation** (`excel_summary_generator.py`)
+2. **Quanta Failure Extraction** (`extract_quanta_failures.py`)
+   - Processes QC3 test packages received from Quanta (manufacturing partner)
+   - Unzips the package and locates the Excel results file (e.g., `QC3_S7TK_0128_build_test.xlsx`)
+   - Uses `analyze_failures.py` to scan Excel for non-zero failure counts
+   - Extracts serial numbers of failed systems
+   - Navigates nested tar.gz archives to find test data directories
+   - Extracts `data_test_*.csv` and `prbs_test_*.csv` for failed systems only
+   - Saves to `quanta/` directory with filenames prefixed by system serial numbers
+   - File organization: `QC3_*.zip` → `0130/{SNs}/` → `QC3_UBB_*.tar.gz` → `tt_funtest_ubb_*/` → `ft_eth_stress_*.tar.gz` → `ft_eth_stress/` → CSV files
+
+3. **Excel Generation** (`excel_summary_generator.py`)
    - Scans `data/` directory for CSV files
    - Extracts metadata from filenames and CSV content:
      - System hostname from `host` column
@@ -139,9 +163,8 @@ Fallback: If `test_type` column is missing, uses filename patterns (`prbs_test`,
 - Each Ethernet port (ETH##) is connected to another Ethernet port on the platform
 - 2 ETH ports share a Serdes so one will always act as "Lead" and the other "Follower". The pairs are (Lead, Follow): (ETH00, ETH01), (ETH02, ETH03), (ETH04, ETH06), (ETH09, ETH07), (ETH11, ETH10).
 
-### Notes for Parsing CSV data
+### CSV Parsing Guidelines
 
-- Headings for each column are in the first row
 - The 'bus_id' should be used to identify the PCIe device (chip), not the 'interface'
 - Use @platform_topology.py to understand Ethernet port connections between chips:
   - Import the module: `from platform_topology import get_connected_port, get_all_connections_for_device, PLATFORM_TOPOLOGY`
@@ -150,5 +173,3 @@ Fallback: If `test_type` column is missing, uses filename patterns (`prbs_test`,
   - The topology maps all ETH port connections across the 4 UBBs (32 chips total)
 - Ethernet ports that connect to cable connectors are routed to other ports that are connected to cable connectors.
   - Try and infer based on failure data which Ethernet ports match up with each other (e.g., cable connector ports that fail on the same run)
-- For PRBS tests, refer to @docs/golden_prbs.csv for an example of a clean run with all used ports on all chips passing
-- For Data tests, refer to @docs/golden_data.csv for an example of a clean run with all used ports on all chips passing
