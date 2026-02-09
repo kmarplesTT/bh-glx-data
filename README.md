@@ -109,12 +109,14 @@ python3 src/extract_quanta_failures.py --help
 ```
 
 The tool will:
+
 - Scan the Excel file (e.g., `QC3_S7TK_0128_build_test.xlsx`) for non-zero failure counts
 - Find directories matching the failed serial numbers
 - Extract `data_test_*.csv` and `prbs_test_*.csv` files from nested archives
 - Save files to `quanta/` directory (default) with descriptive names
 
 **File Organization:**
+
 ```
 QC3_*.zip
 ├── QC3_*_test.xlsx                   (analyzed for failures)
@@ -127,6 +129,39 @@ QC3_*.zip
                     └── prbs_test_*.csv  (extracted)
 ```
 
+### Filter Test Failures
+
+Filter and extract only the failed test rows from CSV test data files. This utility helps isolate problematic test cases for detailed analysis by identifying rows where the `test_status` column indicates a failure (any value other than `ETH_ACTIVE` or `ETH_UNCONNECTED`).
+
+```bash
+# Filter failures from a test data CSV file
+python3 src/filter_failures.py data_test_results.csv
+
+# Specify custom output file location
+python3 src/filter_failures.py data_test_results.csv --output failures.csv
+
+# View help
+python3 src/filter_failures.py --help
+```
+
+The tool will:
+
+- Read the input CSV file containing test data
+- Identify all rows where `test_status` is not `ETH_ACTIVE` or `ETH_UNCONNECTED`
+- Write failures to a new CSV file (default: `<input>_failures.csv`)
+- Display a summary breakdown of failure types
+
+**Example output:**
+
+```
+INFO - Total rows read: 12800
+INFO - Failures found: 2426
+INFO - Failures written to: data_test_results_failures.csv
+
+Failure breakdown by test_status:
+  TRAINING_FAIL: 2426
+```
+
 ## Project Structure
 
 ```text
@@ -137,6 +172,7 @@ bh-glx-data/
 │   ├── jira_csv_retriever.py    # Script to retrieve CSV files from Jira
 │   ├── excel_summary_generator.py # Script to generate Excel summaries
 │   ├── extract_quanta_failures.py # Script to extract failure data from QC3 packages
+│   ├── filter_failures.py        # Filter failed test rows from CSV files
 │   ├── analyze_failures.py       # Analyze Excel files for failures
 │   ├── platform_topology.py      # Platform connectivity mapping
 │   └── validate_topology.py      # Topology validation utility
