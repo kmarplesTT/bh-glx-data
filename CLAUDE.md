@@ -173,3 +173,5 @@ Fallback: If `test_type` column is missing, uses filename patterns (`prbs_test`,
   - The topology maps all ETH port connections across the 4 UBBs (32 chips total)
 - Ethernet ports that connect to cable connectors are routed to other ports that are connected to cable connectors.
   - Try and infer based on failure data which Ethernet ports match up with each other (e.g., cable connector ports that fail on the same run)
+- When asked to analze csv test data, run the @src/filter_failures.py script first on the given csv file to extract the failed port data
+  - This will remove the need to parse the entire csv file and generate a new file with only the failed ports
