@@ -23,7 +23,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Constants
-DATA_DIR = Path('data')
+DATA_DIR = Path('csv_data')
 TEMPLATE_PATH = Path('templates/system_data_template.xlsx')
 OUTPUT_DIR = Path('summaries')
 

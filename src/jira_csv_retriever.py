@@ -5,6 +5,7 @@ Authenticates with Jira, retrieves tickets, finds CSV attachments, and downloads
 import sys
 import argparse
 import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from jira import JIRA
 from jira.exceptions import JIRAError
 import config
@@ -159,13 +160,26 @@ def process_ticket(jira_client, ticket_key):
         result['errors'].append(f"No CSV attachments found on ticket {ticket_key}")
         return result
 
-    # Download each CSV attachment
-    for attachment in csv_attachments:
-        downloaded_path = download_csv_attachment(jira_client, issue, attachment, config.OUTPUT_DIR)
-        if downloaded_path:
-            result['downloaded'] += 1
-        else:
-            result['errors'].append(f"Failed to download {attachment.filename}")
+    # Download attachments in parallel using ThreadPoolExecutor
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        # Submit all download tasks
+        future_to_attachment = {
+            executor.submit(download_csv_attachment, jira_client, issue, attachment, config.OUTPUT_DIR): attachment
+            for attachment in csv_attachments
+        }
+
+        # Process completed downloads
+        for future in as_completed(future_to_attachment):
+            attachment = future_to_attachment[future]
+            try:
+                downloaded_path = future.result()
+                if downloaded_path:
+                    result['downloaded'] += 1
+                else:
+                    result['errors'].append(f"Failed to download {attachment.filename}")
+            except Exception as e:
+                logger.error(f"Exception downloading {attachment.filename}: {e}")
+                result['errors'].append(f"Exception downloading {attachment.filename}: {e}")
 
     return result
 
@@ -182,9 +196,9 @@ def parse_arguments():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  %(prog)s                          # Use tickets from config.yaml
-  %(prog)s SYS-2826                 # Process a single ticket
-  %(prog)s SYS-2826 SYS-2827        # Process multiple tickets
+  %(prog)s                              # Use tickets from config.yaml
+  %(prog)s --tickets SYS-2826           # Process a single ticket
+  %(prog)s --tickets SYS-2826 SYS-2827  # Process multiple tickets
         """
     )
     parser.add_argument(
@@ -236,12 +250,31 @@ def main():
         logger.error(f"Failed to initialize Jira client: {e}")
         sys.exit(1)
 
-    # Process each ticket
+    # Process tickets in parallel using ThreadPoolExecutor
     results = []
-    for ticket_key in ticket_keys:
-        logger.info(f"\n--- Processing ticket {ticket_key} ---")
-        result = process_ticket(jira_client, ticket_key)
-        results.append(result)
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        # Submit all ticket processing tasks
+        future_to_ticket = {
+            executor.submit(process_ticket, jira_client, ticket_key): ticket_key
+            for ticket_key in ticket_keys
+        }
+
+        # Process completed tickets
+        for future in as_completed(future_to_ticket):
+            ticket_key = future_to_ticket[future]
+            try:
+                result = future.result()
+                results.append(result)
+                logger.info(f"Completed processing ticket {ticket_key}")
+            except Exception as e:
+                logger.error(f"Exception processing ticket {ticket_key}: {e}")
+                results.append({
+                    'ticket_key': ticket_key,
+                    'found': False,
+                    'csv_count': 0,
+                    'downloaded': 0,
+                    'errors': [f"Exception processing ticket: {e}"]
+                })
 
     # Print summary
     print("\n" + "="*60)

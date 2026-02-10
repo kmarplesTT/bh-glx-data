@@ -154,6 +154,7 @@ Fallback: If `test_type` column is missing, uses filename patterns (`prbs_test`,
 - Python 3.10+ required
 - Use `python3` when running Python scripts
 - Virtual environment is stored in `.venv/`
+- Always activate the virtual environment when running scripts
 - Uses logging at INFO level by default for operational visibility
 - Usage documentation can be found in @README.md
 
@@ -173,5 +174,7 @@ Fallback: If `test_type` column is missing, uses filename patterns (`prbs_test`,
   - The topology maps all ETH port connections across the 4 UBBs (32 chips total)
 - Ethernet ports that connect to cable connectors are routed to other ports that are connected to cable connectors.
   - Try and infer based on failure data which Ethernet ports match up with each other (e.g., cable connector ports that fail on the same run)
-- When asked to analze csv test data, run the @src/filter_failures.py script first on the given csv file to extract the failed port data
-  - This will remove the need to parse the entire csv file and generate a new file with only the failed ports
+- When asked to analze csv test data, do not parse the provides csv file(s) directly.
+  - Run the @src/filter_failures.py script first on the given csv file to extract the failed port data
+- When looking for failure patterns on connected ports, focus also on the diagnostic data in the train_status dict
+- Refer to `docs/known_failure_signatures.txt` for known failure signatures and store newly found failure signatures in this file for future reference

@@ -8,7 +8,7 @@ ENV/
 .env
 
 # Data directories
-data/
+csv_data/
 summaries/
 quanta/
 ~*

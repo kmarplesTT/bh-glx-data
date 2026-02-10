@@ -45,7 +45,7 @@ else:
     )
 
 # Output directory for downloaded CSV files
-OUTPUT_DIR = Path('data')
+OUTPUT_DIR = Path('csv_data')
 OUTPUT_DIR.mkdir(exist_ok=True)
 
 
