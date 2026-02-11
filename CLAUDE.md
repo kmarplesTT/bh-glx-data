@@ -167,6 +167,8 @@ Fallback: If `test_type` column is missing, uses filename patterns (`prbs_test`,
 ### CSV Parsing Guidelines
 
 - The 'bus_id' should be used to identify the PCIe device (chip), not the 'interface'
+- For Data tests, successful test ports have `test_status` = `ETH_ACTIVE`
+- For PRBS tests, successful test ports have `test_status` = `PASS`
 - Use @platform_topology.py to understand Ethernet port connections between chips:
   - Import the module: `from platform_topology import get_connected_port, get_all_connections_for_device, PLATFORM_TOPOLOGY`
   - Query connections programmatically: `get_connected_port("01:00.0", "ETH07")` returns the connected bus_id and ETH port
@@ -178,3 +180,4 @@ Fallback: If `test_type` column is missing, uses filename patterns (`prbs_test`,
   - Run the @src/filter_failures.py script first on the given csv file to extract the failed port data
 - When looking for failure patterns on connected ports, focus also on the diagnostic data in the train_status dict
 - Refer to `docs/known_failure_signatures.txt` for known failure signatures and store newly found failure signatures in this file for future reference
+- A non-zero `lcpll_lock_fail_cnt` is not an issue unless it results in a failure in the corresponding `test_status` but it is good to note in failure reports
