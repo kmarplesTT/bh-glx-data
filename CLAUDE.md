@@ -18,55 +18,23 @@ The toolset includes:
 # Install dependencies
 pip install -r requirements.txt
 
-# Configure credentials (required for Jira access)
-cp .env.example .env
-# Edit .env with your Jira credentials:
-#   JIRA_SERVER_URL, EMAIL, API_KEY
-
-# Configure ticket list
-# Edit config.yaml to add Jira ticket keys
+# Always activate the virtual environment before running scripts
+. .venv/bin/activate
 ```
 
 ## Common Commands
 
 ### Data Collection from Jira
 
-```bash
-# Download CSV files from tickets in config.yaml
-python jira_csv_retriever.py
-
-# Download from specific tickets (bypasses config.yaml)
-python jira_csv_retriever.py --tickets SYS-2826 SYS-2827
-
-# View help
-python jira_csv_retriever.py --help
-```
+Refer to `README.md` for instructions on how to use `jira_csv_analyzer.py`
 
 ### Excel Summary Generation
 
-```bash
-# Generate Excel summaries for all systems in data/
-python excel_summary_generator.py
-
-# Generate for specific systems only
-python excel_summary_generator.py --systems bh-glx-b02u02 bh-glx-b03u02
-
-# View help
-python excel_summary_generator.py --help
-```
+Refer to `README.md` for instructions on how to use `excel_summary_generator.py`
 
 ### Quanta Failure Data Extraction
 
-```bash
-# Extract failure data from Quanta QC3 test package
-python extract_quanta_failures.py QC3_UBB_20260128_build.zip
-
-# Specify custom output directory
-python extract_quanta_failures.py QC3_UBB_20260128_build.zip --output-dir custom_dir/
-
-# View help
-python extract_quanta_failures.py --help
-```
+Refer to `README.md` for instructions on how to use `extract_quanta_failures.py`
 
 ## Architecture
 
@@ -153,8 +121,6 @@ Fallback: If `test_type` column is missing, uses filename patterns (`prbs_test`,
 - `data/` and `summaries/` directories are gitignored
 - Python 3.10+ required
 - Use `python3` when running Python scripts
-- Virtual environment is stored in `.venv/`
-- Always activate the virtual environment when running scripts
 - Uses logging at INFO level by default for operational visibility
 - Usage documentation can be found in @README.md
 

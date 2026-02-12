@@ -1,1 +1,5 @@
-.env
+# Ignore CLAUDE.md files from parent directories
+# This keeps only the CLAUDE.md in this project root and subdirectories
+../CLAUDE.md
+../../CLAUDE.md
+../../../CLAUDE.md

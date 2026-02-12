@@ -7,6 +7,9 @@ ENV/
 # Environment variables with credentials
 .env
 
+# Claude
+.claude
+
 # Data directories
 csv_data/
 summaries/
