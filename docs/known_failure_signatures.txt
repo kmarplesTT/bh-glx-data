@@ -1,0 +1,232 @@
+# Known Ethernet Test Failure Signatures for BH Galaxy Systems
+
+This file documents known failure patterns discovered through test data analysis.
+Each signature includes diagnostic indicators and potential root causes.
+
+Last Updated: 2026-02-13
+System: s7tk-03
+Firmware: eth_fw_ver (1, 8, 1), serdes_fw_ver (0, 9, 16)
+
+================================================================================
+## SIGNATURE 1: External Cable Signal Detect Timeout
+================================================================================
+
+**Pattern ID:** EXTERNAL_CABLE_SIGDET_TIMEOUT
+
+**Diagnostic Indicators:**
+- test_status: TRAINING_FAIL
+- train_status: LINK_TRAIN_TIMEOUT_MANUAL_EQ
+- serdes_postcode: RETRAIN_FAIL
+- macpcs_postcode: LINK_WAIT
+- remote_pcb_type: ORION (indicates external cable connection)
+- remote_board_id: 0x0000000000000000 (all zeros, no remote detected)
+- sigdet_time_ms: 20000 (maximum timeout)
+- cdr_unlocked_cnt: High (>5000), variable
+- man_eq_retry_cnt: 1-5
+
+**Observed Frequency:** 12 occurrences out of 32 DATA test failures (37.5%)
+
+**Affected Ports:** Primarily ETH02, ETH03, ETH10
+
+**Description:**
+Training fails to complete during signal detect phase when attempting to connect
+to an external cable (ORION remote device type). The 20-second signal detect
+timeout is reached without detecting a valid signal from the remote end.
+
+**Potential Root Causes:**
+1. External cable not physically connected
+2. Cable faulty or damaged
+3. Remote device not powered or not transmitting
+4. Incorrect cable type (e.g., single-mode vs multi-mode fiber)
+5. Cable length exceeds specification limits
+6. Signal integrity degradation on long cable runs
+7. Transmitter power level insufficient for cable length
+
+**Firmware Investigation Areas:**
+- erisc_init.c: Signal detect timeout logic
+- Consider early detection of "no signal" condition
+- Evaluate if 20-second timeout is appropriate for external cables
+- Add diagnostics to differentiate "weak signal" from "no signal"
+
+================================================================================
+## SIGNATURE 2: RX Equalization Timeout
+================================================================================
+
+**Pattern ID:** RX_EQUALIZATION_TIMEOUT
+
+**Diagnostic Indicators:**
+- test_status: TRAINING_FAIL
+- train_status: LINK_TRAIN_TIMEOUT_MANUAL_EQ
+- serdes_postcode: RETRAIN_FAIL
+- macpcs_postcode: LINK_WAIT
+- remote_pcb_type: ORION (external cable) or UBB (internal connection)
+- rx_eq_assert_time_ms: 5000 (maximum timeout)
+- sigdet_time_ms: < 20000 (signal detected, but EQ fails)
+- cdr_unlocked_cnt: Typically very high (>40000)
+- cdr_unlock_transitions: 1
+- man_eq_retry_cnt: 1-2
+
+**Observed Frequency:** 12 occurrences out of 32 DATA test failures (37.5%)
+
+**Affected Ports:** Primarily ETH02, ETH03, ETH10
+
+**Description:**
+Signal is detected successfully (within <200ms typically), but RX equalization
+fails to converge within the 5-second timeout. High CDR unlock counts indicate
+the CDR is struggling to maintain lock during the equalization process.
+
+**Potential Root Causes:**
+1. Poor signal quality requiring excessive equalization attempts
+2. Firmware RX EQ algorithm not converging efficiently
+3. Hardware issue with RX equalizer circuitry
+4. CDR attempting to lock before signal is stable
+5. Signal-to-noise ratio marginal for the data rate (200G)
+6. Timing margin issues at 53.125 Gbps data rate
+
+**Firmware Investigation Areas:**
+- erisc_init.c: RX equalization convergence algorithm
+- CDR lock verification before starting EQ
+- Signal detect → CDR lock → RX EQ sequencing
+- Consider adaptive EQ timeout based on signal quality
+- Add CDR stability check before engaging RX EQ
+- Evaluate if CDR is being started too early after signal detect
+
+**Hardware Investigation:**
+- Measure signal eye diagrams during EQ attempts
+- Check if CDR reference clock is stable
+- Verify LCPLL lock status (should be 0 failures)
+
+================================================================================
+## SIGNATURE 3: Link Down Post-Training
+================================================================================
+
+**Pattern ID:** LINK_DOWN_POST_TRAINING
+
+**Diagnostic Indicators:**
+- test_status: LINK_DOWN
+- train_status: LINK_TRAIN_PASS (training completed successfully)
+- port_status: PORT_UP (at training completion)
+- serdes_postcode: PASS
+- macpcs_postcode: PASS
+- All training metrics: 0 errors (clean training)
+- cdr_unlocked_cnt: 0
+- lcpll_lock_fail_cnt: 0
+- sigdet_time_ms: 4000-7000 (normal range)
+- rx_eq_assert_time_ms: 600-650 (normal range)
+
+**Observed Frequency:** 8 occurrences out of 32 DATA test failures (25%)
+
+**Affected Ports:** ETH10 exclusively (16 total ETH10 failures, 8 are this pattern)
+
+**Description:**
+Link trains successfully with clean metrics and passes all training phases.
+However, during the actual data transfer test, the link goes down. This indicates
+the link was marginal or the data transfer test exposes an issue not visible
+during training.
+
+**Potential Root Causes:**
+1. MAC/PCS layer issues during data packet transfer
+2. Marginal signal quality that passes training but fails under traffic load
+3. Flow control or backpressure handling issues in data path
+4. Remote side link instability during traffic
+5. Bit error rate threshold too aggressive
+6. FEC (Forward Error Correction) overload during traffic
+7. Buffer overflow or underflow in packet handling
+8. Link partner issues (both sides are UBB boards)
+
+**Firmware Investigation Areas:**
+- MAC/PCS error handling during active data transfer
+- Link monitoring thresholds during traffic
+- Error rate thresholds triggering link down
+- Flow control implementation
+- FEC error rate monitoring and thresholds
+- Packet buffer management
+- Link keepalive/heartbeat mechanism
+
+**Test Environment:**
+- All failures show remote_pcb_type: UBB (internal chip-to-chip connections)
+- This suggests potential backplane or board-level signal integrity issues
+- Pattern appears on ETH10 only - investigate specific ETH10 routing
+
+================================================================================
+## SIGNATURE 4: CDR Unlock During Training (Subpattern)
+================================================================================
+
+**Pattern ID:** CDR_UNLOCK_DURING_TRAINING
+
+**Diagnostic Indicators:**
+- Appears as subpattern of EXTERNAL_CABLE_SIGDET_TIMEOUT or RX_EQUALIZATION_TIMEOUT
+- cdr_unlocked_cnt: > 5000 (often 40000-100000+)
+- cdr_unlock_transitions: 1 (CDR locked then unlocked)
+- Occurs during manual EQ training phase
+
+**Description:**
+CDR initially achieves lock but then loses it during training, accumulating
+very high unlock counts. This suggests the CDR cannot maintain phase lock,
+either due to unstable signal or premature CDR engagement.
+
+**Potential Root Causes:**
+1. CDR attempting to lock before signal is fully stable
+2. Signal quality degradation during training sequence
+3. Reference clock instability or jitter
+4. Timing margin issues at high data rate
+
+**Firmware Investigation Areas:**
+- Verify signal detect criteria before engaging CDR
+- Add delay between signal detect and CDR lock attempt
+- Check LCPLL stability before starting CDR
+- Consider CDR relock attempts with backoff
+
+================================================================================
+## Analysis Summary
+================================================================================
+
+**Total Failures Analyzed:** 32 DATA test failures across 4 test runs
+**PRBS Failures:** 0 (all PRBS tests passed)
+
+**Failure Distribution:**
+- External Cable Signal Detect Timeout: 12 (37.5%)
+- RX Equalization Timeout: 12 (37.5%)
+- Link Down Post-Training: 8 (25%)
+
+**Port-Specific Observations:**
+- ETH10: 16 failures (50% of all failures) - Investigate routing/design
+- ETH02, ETH03: 4 failures each
+- ETH00, ETH01: 4 failures each
+
+**Key Findings:**
+1. All training failures involve external cable connections (ORION remote)
+2. All post-training link failures involve internal connections (UBB-to-UBB)
+3. No LCPLL failures observed (all lcpll_lock_fail_cnt = 0)
+4. CDR instability is a common factor in training timeouts
+5. Training timeout values (20s sigdet, 5s RX EQ) may need tuning
+
+================================================================================
+## Recommendations for Firmware Team
+================================================================================
+
+1. **Immediate Actions:**
+   - Add early "no signal" detection to avoid full 20s timeout
+   - Verify signal stability before engaging CDR
+   - Review RX EQ convergence algorithm efficiency
+   - Add CDR relock attempts with backoff for high unlock counts
+
+2. **Medium-Term Actions:**
+   - Implement adaptive timeout values based on signal quality
+   - Add more granular training phase logging
+   - Consider separate code paths for external vs internal connections
+   - Review ETH10 specific initialization sequence
+
+3. **Investigation:**
+   - Why is ETH10 disproportionately affected?
+   - Is the link down detection too aggressive during traffic?
+   - What differentiates passing vs failing RX EQ attempts?
+   - Root cause analysis of post-training link instability
+
+4. **Test Environment:**
+   - Verify external cable connections and types
+   - Check signal integrity on backplane traces (especially ETH10)
+   - Measure actual signal quality at training failure points
+   - Consider adding loopback tests to isolate board issues
+
+================================================================================

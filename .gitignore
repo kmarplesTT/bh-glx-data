@@ -14,6 +14,8 @@ ENV/
 csv_data/
 summaries/
 quanta/
+failures/
+reports/
 ~*
 
 # Python cache
