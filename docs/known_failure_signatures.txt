@@ -18,11 +18,10 @@ Firmware: eth_fw_ver (1, 8, 1), serdes_fw_ver (0, 9, 16)
 - train_status: LINK_TRAIN_TIMEOUT_MANUAL_EQ
 - serdes_postcode: RETRAIN_FAIL
 - macpcs_postcode: LINK_WAIT
-- remote_pcb_type: ORION (indicates external cable connection)
-- remote_board_id: 0x0000000000000000 (all zeros, no remote detected)
 - sigdet_time_ms: 20000 (maximum timeout)
 - cdr_unlocked_cnt: High (>5000), variable
 - man_eq_retry_cnt: 1-5
+- Note: Remote device shows ORION type (external cable) with no remote detected
 
 **Observed Frequency:** 12 occurrences out of 32 DATA test failures (37.5%)
 
@@ -59,7 +58,6 @@ timeout is reached without detecting a valid signal from the remote end.
 - train_status: LINK_TRAIN_TIMEOUT_MANUAL_EQ
 - serdes_postcode: RETRAIN_FAIL
 - macpcs_postcode: LINK_WAIT
-- remote_pcb_type: ORION (external cable) or UBB (internal connection)
 - rx_eq_assert_time_ms: 5000 (maximum timeout)
 - sigdet_time_ms: < 20000 (signal detected, but EQ fails)
 - cdr_unlocked_cnt: Typically very high (>40000)
@@ -113,6 +111,7 @@ the CDR is struggling to maintain lock during the equalization process.
 - lcpll_lock_fail_cnt: 0
 - sigdet_time_ms: 4000-7000 (normal range)
 - rx_eq_assert_time_ms: 600-650 (normal range)
+- Note: All failures on internal UBB-to-UBB connections
 
 **Observed Frequency:** 8 occurrences out of 32 DATA test failures (25%)
 
