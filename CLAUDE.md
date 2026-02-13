@@ -136,10 +136,7 @@ Fallback: If `test_type` column is missing, uses filename patterns (`prbs_test`,
 - For Data tests, successful test ports have `test_status` = `ETH_ACTIVE`
 - For PRBS tests, successful test ports have `test_status` = `PASS`
 - Use @platform_topology.py to understand Ethernet port connections between chips:
-  - Import the module: `from platform_topology import get_connected_port, get_all_connections_for_device, PLATFORM_TOPOLOGY`
-  - Query connections programmatically: `get_connected_port("01:00.0", "ETH07")` returns the connected bus_id and ETH port
-  - Get all connections for a device: `get_all_connections_for_device("01:00.0")`
-  - The topology maps all ETH port connections across the 4 UBBs (32 chips total)
+  - Use this information to identify connected ports that are failing together
 - Ethernet ports that connect to cable connectors are routed to other ports that are connected to cable connectors.
   - Try and infer based on failure data which Ethernet ports match up with each other (e.g., cable connector ports that fail on the same run)
 - When asked to analze csv test data, do not parse the provides csv file(s) directly.
