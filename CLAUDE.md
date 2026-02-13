@@ -147,3 +147,8 @@ Fallback: If `test_type` column is missing, uses filename patterns (`prbs_test`,
 - When looking for failure patterns on connected ports, focus also on the diagnostic data in the train_status dict
 - Refer to `docs/known_failure_signatures.txt` for known failure signatures and store newly found failure signatures in this file for future reference
 - A non-zero `lcpll_lock_fail_cnt` is not an issue unless it results in a failure in the corresponding `test_status` but it is good to note in failure reports
+- Remote device information (`remote_info` in train_status) is often not relevant to failure analysis:
+  - External cable connections show `remote_pcb_type: ORION` with all-zero identifiers when no remote is detected
+  - Internal connections show `remote_pcb_type: UBB` with the remote chip's board ID
+  - This info provides context (internal vs external connection) but is not a key diagnostic indicator
+  - Focus on training metrics (CDR unlock counts, retry counts, timeout values) rather than remote device details
