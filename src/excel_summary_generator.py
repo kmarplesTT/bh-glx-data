@@ -59,12 +59,13 @@ def extract_firmware_version(csv_path):
     Extract firmware version from CSV filename.
 
     Looks for pattern like 'erisc_v1_7_103' or 'v1_7_103' in filename.
+    If no version pattern is found, returns 'unknown'.
 
     Args:
         csv_path (Path): Path to CSV file
 
     Returns:
-        str: Firmware version string (e.g., 'erisc_v1_7_103') or None if not found
+        str: Firmware version string (e.g., 'erisc_v1_7_103') or 'unknown' if not found
     """
     filename = csv_path.name
 
@@ -80,8 +81,8 @@ def extract_firmware_version(csv_path):
     if match:
         return match.group(0)
 
-    logger.warning(f"Could not extract firmware version from filename: {filename}")
-    return None
+    logger.warning(f"Could not extract firmware version from filename: {filename}, using 'unknown'")
+    return 'unknown'
 
 
 def identify_test_type(csv_path):
@@ -181,10 +182,6 @@ def group_csvs_by_system_and_firmware(csv_files):
 
         if not hostname:
             logger.warning(f"Skipping {csv_path.name}: could not extract hostname")
-            continue
-
-        if not firmware_version:
-            logger.warning(f"Skipping {csv_path.name}: could not extract firmware version")
             continue
 
         if not test_type:
