@@ -8,10 +8,10 @@ System: s7tk-03
 Firmware: eth_fw_ver (1, 8, 1), serdes_fw_ver (0, 9, 16)
 
 ================================================================================
-## SIGNATURE 1: External Cable Signal Detect Timeout
+## SIGNATURE 1: Manual EQ Training Timeout (Bidirectional)
 ================================================================================
 
-**Pattern ID:** EXTERNAL_CABLE_SIGDET_TIMEOUT
+**Pattern ID:** MANUAL_EQ_TRAINING_TIMEOUT
 
 **Diagnostic Indicators:**
 - test_status: TRAINING_FAIL
@@ -20,50 +20,36 @@ Firmware: eth_fw_ver (1, 8, 1), serdes_fw_ver (0, 9, 16)
 - train_mode: AW_MANUAL_EQ
 - serdes_postcode: RETRAIN_FAIL
 - macpcs_postcode: LINK_WAIT
-- sigdet_time_ms: 20000 (maximum timeout)
-- cdr_unlocked_cnt: High (>5000), variable
-- man_eq_retry_cnt: 1-5
 - Note: Remote device shows ORION type (external cable) with no remote detected
 
-**Observed Frequency:** 12 occurrences out of 32 DATA test failures (37.5%)
+**Timeout Variants:**
+1. **Signal Detect Timeout Side:**
+   - sigdet_time_ms: 20000 (maximum timeout)
+   - cdr_unlocked_cnt: Variable (>5000)
+   - man_eq_retry_cnt: 1-5
+
+2. **RX Equalization Timeout Side:**
+   - sigdet_time_ms: < 20000 (signal detected, but EQ fails)
+   - rx_eq_assert_time_ms: 5000 (maximum timeout)
+   - cdr_unlocked_cnt: Very high (>40000)
+   - cdr_unlock_transitions: 1
+   - man_eq_retry_cnt: 1-2
+
+**Observed Frequency:** 24 occurrences out of 32 DATA test failures (75%)
 
 **Affected Ports:** Primarily ETH02, ETH03, ETH10
 
 **Description:**
-Training fails to complete during signal detect phase when attempting to connect
-to an external cable (ORION remote device type). The 20-second signal detect
-timeout is reached without detecting a valid signal from the remote end.
+Training fails during manual EQ training phase on external cable connections.
+This manifests as two related failure modes:
+- One side times out during signal detect (20s) - cannot detect signal from remote
+- Connected side times out during RX equalization (5s) - signal detected but EQ fails to converge
+
+Both sides fail to complete the training handshake. High CDR unlock counts common
+on both sides indicate CDR instability during the training process.
 
 ================================================================================
-## SIGNATURE 2: RX Equalization Timeout
-================================================================================
-
-**Pattern ID:** RX_EQUALIZATION_TIMEOUT
-
-**Diagnostic Indicators:**
-- test_status: TRAINING_FAIL
-- train_status: LINK_TRAIN_TIMEOUT_MANUAL_EQ
-- port_type: CHIP_TO_QSFPDD
-- train_mode: AW_MANUAL_EQ
-- serdes_postcode: RETRAIN_FAIL
-- macpcs_postcode: LINK_WAIT
-- rx_eq_assert_time_ms: 5000 (maximum timeout)
-- sigdet_time_ms: < 20000 (signal detected, but EQ fails)
-- cdr_unlocked_cnt: Typically very high (>40000)
-- cdr_unlock_transitions: 1
-- man_eq_retry_cnt: 1-2
-
-**Observed Frequency:** 12 occurrences out of 32 DATA test failures (37.5%)
-
-**Affected Ports:** Primarily ETH02, ETH03, ETH10
-
-**Description:**
-Signal is detected successfully (within <200ms typically), but RX equalization
-fails to converge within the 5-second timeout. High CDR unlock counts indicate
-the CDR is struggling to maintain lock during the equalization process.
-
-================================================================================
-## SIGNATURE 3: Link Down Post-Training
+## SIGNATURE 2: Link Down Post-Training
 ================================================================================
 
 **Pattern ID:** LINK_DOWN_POST_TRAINING
@@ -94,13 +80,13 @@ the link was marginal or the data transfer test exposes an issue not visible
 during training.
 
 ================================================================================
-## SIGNATURE 4: CDR Unlock During Training (Subpattern)
+## CDR Unlock During Training (Subpattern)
 ================================================================================
 
 **Pattern ID:** CDR_UNLOCK_DURING_TRAINING
 
 **Diagnostic Indicators:**
-- Appears as subpattern of EXTERNAL_CABLE_SIGDET_TIMEOUT or RX_EQUALIZATION_TIMEOUT
+- Appears as subpattern of MANUAL_EQ_TRAINING_TIMEOUT
 - port_type: CHIP_TO_QSFPDD
 - train_mode: AW_MANUAL_EQ
 - cdr_unlocked_cnt: > 5000 (often 40000-100000+)
@@ -109,8 +95,8 @@ during training.
 
 **Description:**
 CDR initially achieves lock but then loses it during training, accumulating
-very high unlock counts. This suggests the CDR cannot maintain phase lock,
-either due to unstable signal or premature CDR engagement.
+very high unlock counts. This is a common characteristic observed within the
+manual EQ training timeout failures.
 
 ================================================================================
 ## Analysis Summary
@@ -120,8 +106,9 @@ either due to unstable signal or premature CDR engagement.
 **PRBS Failures:** 0 (all PRBS tests passed)
 
 **Failure Distribution:**
-- External Cable Signal Detect Timeout: 12 (37.5%)
-- RX Equalization Timeout: 12 (37.5%)
+- Manual EQ Training Timeout: 24 (75%)
+  - Signal Detect Timeout variant: 12
+  - RX Equalization Timeout variant: 12
 - Link Down Post-Training: 8 (25%)
 
 **Port Type Patterns:**
@@ -138,10 +125,11 @@ either due to unstable signal or premature CDR engagement.
 - ETH00, ETH01: 4 failures each
 
 **Key Findings:**
-1. All training failures (TRAINING_FAIL status) use CHIP_TO_QSFPDD port type and AW_MANUAL_EQ train mode
-2. All post-training link failures (LINK_DOWN status) use CHIP_TO_CHIP port type
-3. No LCPLL failures observed (all lcpll_lock_fail_cnt = 0)
-4. CDR instability is a common factor in training timeouts
-5. Training timeout values: 20s signal detect, 5s RX equalization
+1. Manual EQ training failures are bidirectional - both sides of connection fail with different timeout symptoms
+2. All training failures (TRAINING_FAIL status) use CHIP_TO_QSFPDD port type and AW_MANUAL_EQ train mode
+3. All post-training link failures (LINK_DOWN status) use CHIP_TO_CHIP port type
+4. No LCPLL failures observed (all lcpll_lock_fail_cnt = 0)
+5. CDR instability (high unlock counts) is common in manual EQ training timeouts
+6. Training timeout values: 20s signal detect, 5s RX equalization
 
 ================================================================================

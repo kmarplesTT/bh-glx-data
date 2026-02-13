@@ -135,25 +135,20 @@ def categorize_failure_pattern(signature):
     sigdet_time = signature.get('sigdet_time_ms', 0)
     rx_eq_time = signature.get('rx_eq_assert_time_ms', 0)
     serdes_postcode = signature.get('serdes_postcode')
-    remote_pcb = signature.get('remote_pcb_type')
+    port_type = signature.get('port_type')
+    train_mode = signature.get('train_mode')
 
-    # Pattern 1: External cable connection timeout (ORION remote with signal detect timeout)
-    if remote_pcb == 'ORION' and sigdet_time >= 20000 and train_status == 'LINK_TRAIN_TIMEOUT_MANUAL_EQ':
-        return 'EXTERNAL_CABLE_SIGDET_TIMEOUT'
+    # Pattern 1: Manual EQ training timeout (bidirectional - combines sigdet and RX EQ timeouts)
+    if (train_status == 'LINK_TRAIN_TIMEOUT_MANUAL_EQ' and
+        port_type == 'CHIP_TO_QSFPDD' and
+        train_mode == 'AW_MANUAL_EQ'):
+        return 'MANUAL_EQ_TRAINING_TIMEOUT'
 
-    # Pattern 2: RX equalization timeout
-    if rx_eq_time >= 5000 and train_status == 'LINK_TRAIN_TIMEOUT_MANUAL_EQ':
-        return 'RX_EQUALIZATION_TIMEOUT'
-
-    # Pattern 3: CDR unlock during training
-    if cdr_unlocked > 5000 and train_status == 'LINK_TRAIN_TIMEOUT_MANUAL_EQ':
-        return 'CDR_UNLOCK_DURING_TRAINING'
-
-    # Pattern 4: Link down after successful training
+    # Pattern 2: Link down after successful training
     if test_status == 'LINK_DOWN' and train_status == 'LINK_TRAIN_PASS':
         return 'LINK_DOWN_POST_TRAINING'
 
-    # Pattern 5: General training failure
+    # General training failure (fallback)
     if test_status == 'TRAINING_FAIL':
         return 'TRAINING_FAIL_GENERAL'
 
@@ -210,18 +205,11 @@ def generate_failure_report(analysis):
         report_lines.append(f"\n### {pattern.replace('_', ' ').title()} ({count} occurrences)\n")
 
         # Add description
-        if pattern == 'EXTERNAL_CABLE_SIGDET_TIMEOUT':
-            report_lines.append("**Description:** External cable connection timeout during signal detect phase. ")
-            report_lines.append("The remote device shows 'ORION' PCB type with all-zero identifiers, indicating ")
-            report_lines.append("external cable connection. Signal detect timeout (20s) reached.\n")
-
-        elif pattern == 'RX_EQUALIZATION_TIMEOUT':
-            report_lines.append("**Description:** RX equalization timeout during manual EQ training. ")
-            report_lines.append("Signal detected successfully but RX equalization failed to converge within 5-second timeout.\n")
-
-        elif pattern == 'CDR_UNLOCK_DURING_TRAINING':
-            report_lines.append("**Description:** Clock and Data Recovery (CDR) lost lock during training. ")
-            report_lines.append("High CDR unlock counts indicate the CDR could not maintain phase lock.\n")
+        if pattern == 'MANUAL_EQ_TRAINING_TIMEOUT':
+            report_lines.append("**Description:** Manual EQ training timeout during external cable connection. ")
+            report_lines.append("Bidirectional failure - one side times out during signal detect (20s), ")
+            report_lines.append("connected side times out during RX equalization (5s). ")
+            report_lines.append("Both sides fail to complete training handshake.\n")
 
         elif pattern == 'LINK_DOWN_POST_TRAINING':
             report_lines.append("**Description:** Link went down during data transfer test after successful training. ")
