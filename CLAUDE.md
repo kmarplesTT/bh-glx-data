@@ -152,3 +152,9 @@ Fallback: If `test_type` column is missing, uses filename patterns (`prbs_test`,
   - Internal connections show `remote_pcb_type: UBB` with the remote chip's board ID
   - This info provides context (internal vs external connection) but is not a key diagnostic indicator
   - Focus on training metrics (CDR unlock counts, retry counts, timeout values) rather than remote device details
+- When documenting failure signatures in `docs/known_failure_signatures.txt`:
+  - Always include `port_type` (e.g., CHIP_TO_QSFPDD, CHIP_TO_CHIP) and `train_mode` (e.g., AW_MANUAL_EQ, AW_ANLT_MODE) in diagnostic indicators
+  - These values help identify failure patterns and correlations
+  - Do NOT document speculative root causes or investigation recommendations
+  - Keep descriptions factual - document only what is observed in the data
+  - Avoid suggesting firmware changes, timeouts adjustments, or hardware investigations

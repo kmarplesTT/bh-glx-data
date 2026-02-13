@@ -67,6 +67,8 @@ def analyze_data_test_failures():
         'test_status_breakdown': combined_df['test_status'].value_counts().to_dict(),
         'failures_by_bus': combined_df['bus_id'].value_counts().to_dict(),
         'failures_by_eth_port': combined_df['ETH ID'].value_counts().to_dict(),
+        'port_type_breakdown': combined_df['port_type'].value_counts().to_dict(),
+        'train_mode_breakdown': combined_df['train_mode'].value_counts().to_dict(),
         'failure_signatures': []
     }
 
@@ -81,6 +83,8 @@ def analyze_data_test_failures():
             'bus_id': bus_id,
             'eth_id': eth_id,
             'test_status': test_status,
+            'port_type': row.get('port_type', 'N/A'),
+            'train_mode': row.get('train_mode', 'N/A'),
             'source_file': row['source_file']
         }
 
@@ -180,6 +184,16 @@ def generate_failure_report(analysis):
     for eth_id, count in sorted(analysis['failures_by_eth_port'].items(), key=lambda x: x[1], reverse=True):
         report_lines.append(f"- **{eth_id}:** {count} failure(s)")
 
+    # Port type breakdown
+    report_lines.append(f"\n### Failures by Port Type\n")
+    for port_type, count in sorted(analysis['port_type_breakdown'].items(), key=lambda x: x[1], reverse=True):
+        report_lines.append(f"- **{port_type}:** {count} failure(s)")
+
+    # Train mode breakdown
+    report_lines.append(f"\n### Failures by Train Mode\n")
+    for train_mode, count in sorted(analysis['train_mode_breakdown'].items(), key=lambda x: x[1], reverse=True):
+        report_lines.append(f"- **{train_mode}:** {count} failure(s)")
+
     # Categorize failure patterns
     pattern_counts = Counter()
     pattern_examples = defaultdict(list)
@@ -199,38 +213,19 @@ def generate_failure_report(analysis):
         if pattern == 'EXTERNAL_CABLE_SIGDET_TIMEOUT':
             report_lines.append("**Description:** External cable connection timeout during signal detect phase. ")
             report_lines.append("The remote device shows 'ORION' PCB type with all-zero identifiers, indicating ")
-            report_lines.append("external cable connection. Signal detect timeout (20s) suggests no signal received.\n")
-            report_lines.append("**Potential Causes:**")
-            report_lines.append("- Cable not connected or faulty")
-            report_lines.append("- Remote device not powered or not transmitting")
-            report_lines.append("- Incorrect cable type or length")
-            report_lines.append("- Signal integrity issues on long cable runs\n")
+            report_lines.append("external cable connection. Signal detect timeout (20s) reached.\n")
 
         elif pattern == 'RX_EQUALIZATION_TIMEOUT':
             report_lines.append("**Description:** RX equalization timeout during manual EQ training. ")
-            report_lines.append("The receiver was unable to complete equalization within the 5-second timeout.\n")
-            report_lines.append("**Potential Causes:**")
-            report_lines.append("- Poor signal quality requiring excessive EQ attempts")
-            report_lines.append("- Firmware issue in RX EQ algorithm convergence")
-            report_lines.append("- Hardware issue with RX equalizer circuitry\n")
+            report_lines.append("Signal detected successfully but RX equalization failed to converge within 5-second timeout.\n")
 
         elif pattern == 'CDR_UNLOCK_DURING_TRAINING':
             report_lines.append("**Description:** Clock and Data Recovery (CDR) lost lock during training. ")
             report_lines.append("High CDR unlock counts indicate the CDR could not maintain phase lock.\n")
-            report_lines.append("**Potential Causes:**")
-            report_lines.append("- Unstable clock reference or PLL issues")
-            report_lines.append("- Poor signal quality causing CDR to lose lock")
-            report_lines.append("- Timing margin issues at high data rates (200G)")
-            report_lines.append("- Signal detect timing issues causing premature CDR attempts\n")
 
         elif pattern == 'LINK_DOWN_POST_TRAINING':
             report_lines.append("**Description:** Link went down during data transfer test after successful training. ")
-            report_lines.append("This indicates the link trained successfully but failed during actual data traffic.\n")
-            report_lines.append("**Potential Causes:**")
-            report_lines.append("- MAC/PCS layer issues during data transfer")
-            report_lines.append("- Marginal signal quality that passes training but fails under traffic load")
-            report_lines.append("- Flow control or backpressure handling issues")
-            report_lines.append("- Remote side link stability issues\n")
+            report_lines.append("Training completed with clean metrics but link failed during actual data traffic.\n")
 
         # Add examples
         report_lines.append("**Example Failures:**\n")
@@ -238,6 +233,8 @@ def generate_failure_report(analysis):
             report_lines.append(f"{i}. **{example['bus_id']} {example['eth_id']}** (from {example['source_file']})")
             report_lines.append(f"   - Test Status: {example['test_status']}")
             report_lines.append(f"   - Train Status: {example.get('train_status', 'N/A')}")
+            report_lines.append(f"   - Port Type: {example.get('port_type', 'N/A')}")
+            report_lines.append(f"   - Train Mode: {example.get('train_mode', 'N/A')}")
             report_lines.append(f"   - Serdes Postcode: {example.get('serdes_postcode', 'N/A')}")
             report_lines.append(f"   - CDR Unlocked Count: {example.get('cdr_unlocked_cnt', 0)}")
             report_lines.append(f"   - Manual EQ Retries: {example.get('man_eq_retry_cnt', 0)}")
@@ -256,86 +253,55 @@ def generate_failure_report(analysis):
     return '\n'.join(report_lines)
 
 def generate_firmware_investigation_report(analysis):
-    """Generate a targeted report for firmware engineers investigating issues."""
+    """Generate a detailed diagnostic data report for firmware engineers."""
 
     report_lines = []
-    report_lines.append("# Firmware Investigation Guide - Ethernet Training Failures")
-    report_lines.append(f"\n**For:** Firmware Engineering Team")
-    report_lines.append(f"**Generated:** {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    report_lines.append("# Ethernet Test Failure - Detailed Diagnostic Data")
+    report_lines.append(f"\n**Generated:** {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')}")
     report_lines.append(f"**System:** s7tk-03")
     report_lines.append(f"**Firmware Version:** eth_fw_ver (1, 8, 1), serdes_fw_ver (0, 9, 16)\n")
 
-    report_lines.append("## Executive Summary\n")
-    report_lines.append(f"Analyzed {analysis['total_failures']} DATA test failures across {analysis['files_analyzed']} test runs. ")
-    report_lines.append("No PRBS test failures detected. Failures primarily occur during manual EQ training phase ")
-    report_lines.append("with external cable connections.\n")
+    report_lines.append("## Summary\n")
+    report_lines.append(f"Analyzed {analysis['total_failures']} DATA test failures across {analysis['files_analyzed']} test runs.\n")
 
-    report_lines.append("## Critical Firmware Areas to Investigate\n")
-
-    # Categorize failures for firmware focus areas
+    # Categorize failures
     pattern_counts = Counter()
     for sig in analysis['failure_signatures']:
         pattern = categorize_failure_pattern(sig)
         pattern_counts[pattern] += 1
 
-    report_lines.append("### 1. Manual EQ Training State Machine\n")
-    report_lines.append("**Priority:** HIGH\n")
-    report_lines.append(f"**Affected Failures:** {pattern_counts['EXTERNAL_CABLE_SIGDET_TIMEOUT'] + pattern_counts['RX_EQUALIZATION_TIMEOUT']}\n")
-    report_lines.append("**Issue:** Training timeouts during signal detect and RX equalization phases.\n")
-    report_lines.append("**Firmware Modules to Review:**")
-    report_lines.append("- `erisc_init.c` - Ethernet initialization and training orchestration")
-    report_lines.append("- Signal detect timeout handling (currently 20 seconds)")
-    report_lines.append("- RX equalization convergence logic and timeout handling (5 seconds)")
-    report_lines.append("- Retry logic and backoff mechanisms\n")
-    report_lines.append("**Questions to Answer:**")
-    report_lines.append("- Is the 20-second signal detect timeout appropriate for external cables?")
-    report_lines.append("- Should there be early detection of 'no signal' condition?")
-    report_lines.append("- Is the RX EQ algorithm converging or stuck in retry loops?")
-    report_lines.append("- Are retry counts being properly enforced?\n")
+    report_lines.append("**Failure Pattern Distribution:**")
+    for pattern, count in pattern_counts.most_common():
+        if pattern != 'UNCATEGORIZED':
+            report_lines.append(f"- {pattern.replace('_', ' ').title()}: {count}")
+    report_lines.append("")
 
-    if pattern_counts['CDR_UNLOCK_DURING_TRAINING'] > 0:
-        report_lines.append("### 2. Clock and Data Recovery (CDR) Stability\n")
-        report_lines.append("**Priority:** HIGH\n")
-        report_lines.append(f"**Affected Failures:** {pattern_counts['CDR_UNLOCK_DURING_TRAINING']}\n")
-        report_lines.append("**Issue:** CDR losing lock during training with high unlock counts (>5000).\n")
-        report_lines.append("**Firmware Modules to Review:**")
-        report_lines.append("- CDR lock detection and monitoring")
-        report_lines.append("- Signal detect and CDR sequencing")
-        report_lines.append("- LCPLL initialization and monitoring\n")
-        report_lines.append("**Questions to Answer:**")
-        report_lines.append("- Is signal detect asserting before signal is truly stable?")
-        report_lines.append("- Should CDR lock be verified before proceeding with training?")
-        report_lines.append("- Are we attempting training too early after signal detect?")
-        report_lines.append("- Is there a minimum signal quality check before engaging CDR?\n")
+    # Port type and train mode breakdown
+    report_lines.append("**Port Type Distribution:**")
+    for port_type, count in sorted(analysis['port_type_breakdown'].items(), key=lambda x: x[1], reverse=True):
+        report_lines.append(f"- {port_type}: {count}")
+    report_lines.append("")
 
-    if pattern_counts['LINK_DOWN_POST_TRAINING'] > 0:
-        report_lines.append("### 3. Link Stability During Data Transfer\n")
-        report_lines.append("**Priority:** MEDIUM\n")
-        report_lines.append(f"**Affected Failures:** {pattern_counts['LINK_DOWN_POST_TRAINING']}\n")
-        report_lines.append("**Issue:** Link going down during data test after successful training.\n")
-        report_lines.append("**Firmware Modules to Review:**")
-        report_lines.append("- Link monitoring and keepalive mechanisms")
-        report_lines.append("- MAC/PCS error handling during traffic")
-        report_lines.append("- Flow control and backpressure handling\n")
-        report_lines.append("**Questions to Answer:**")
-        report_lines.append("- What triggers link down detection during traffic?")
-        report_lines.append("- Are error thresholds appropriate for the link quality?")
-        report_lines.append("- Is there automatic link recovery or retry logic?\n")
+    report_lines.append("**Train Mode Distribution:**")
+    for train_mode, count in sorted(analysis['train_mode_breakdown'].items(), key=lambda x: x[1], reverse=True):
+        report_lines.append(f"- {train_mode}: {count}")
+    report_lines.append("")
 
     report_lines.append("## Detailed Diagnostic Data\n")
+    report_lines.append("Representative examples from each failure pattern:\n")
 
     # Find representative examples with detailed diagnostics
-    report_lines.append("### Representative Failure Examples\n")
-
     patterns_seen = set()
     for sig in analysis['failure_signatures']:
         pattern = categorize_failure_pattern(sig)
         if pattern not in patterns_seen and pattern != 'UNCATEGORIZED':
             patterns_seen.add(pattern)
-            report_lines.append(f"\n#### {pattern.replace('_', ' ').title()}\n")
+            report_lines.append(f"\n### {pattern.replace('_', ' ').title()}\n")
             report_lines.append(f"**Device:** {sig['bus_id']} {sig['eth_id']}")
             report_lines.append(f"**Test Status:** {sig['test_status']}")
             report_lines.append(f"**Train Status:** {sig.get('train_status', 'N/A')}")
+            report_lines.append(f"**Port Type:** {sig.get('port_type', 'N/A')}")
+            report_lines.append(f"**Train Mode:** {sig.get('train_mode', 'N/A')}")
             report_lines.append(f"**Port Status:** {sig.get('port_status', 'N/A')}")
             report_lines.append(f"**Serdes Postcode:** {sig.get('serdes_postcode', 'N/A')}")
             report_lines.append(f"**MACPCS Postcode:** {sig.get('macpcs_postcode', 'N/A')}\n")
@@ -349,14 +315,6 @@ def generate_firmware_investigation_report(analysis):
             report_lines.append("**Training Times:**")
             report_lines.append(f"- Signal Detect: {sig.get('sigdet_time_ms', 0)} ms")
             report_lines.append(f"- RX EQ Assert: {sig.get('rx_eq_assert_time_ms', 0)} ms\n")
-
-    report_lines.append("\n## Recommended Actions\n")
-    report_lines.append("1. **Code Review:** Review manual EQ training state machine in erisc_init.c")
-    report_lines.append("2. **Timeout Analysis:** Evaluate if current timeout values are appropriate")
-    report_lines.append("3. **Early Exit Logic:** Add early detection for 'no signal' conditions")
-    report_lines.append("4. **CDR Sequencing:** Review signal detect → CDR lock → training sequencing")
-    report_lines.append("5. **Logging Enhancement:** Add more granular logging during training phases")
-    report_lines.append("6. **Test Environment:** Verify external cable connections and test setup\n")
 
     return '\n'.join(report_lines)
 
@@ -400,12 +358,12 @@ def main():
         f.write(report)
     print(f"Generated failure analysis report: {report_path}")
 
-    # Generate firmware investigation report
-    fw_report = generate_firmware_investigation_report(analysis)
-    fw_report_path = REPORTS_DIR / 'firmware_investigation_guide.md'
-    with open(fw_report_path, 'w') as f:
-        f.write(fw_report)
-    print(f"Generated firmware investigation guide: {fw_report_path}")
+    # Generate detailed diagnostic data report
+    diag_report = generate_firmware_investigation_report(analysis)
+    diag_report_path = REPORTS_DIR / 'detailed_diagnostic_data.md'
+    with open(diag_report_path, 'w') as f:
+        f.write(diag_report)
+    print(f"Generated detailed diagnostic data report: {diag_report_path}")
 
     print("\nReport generation complete!")
 
