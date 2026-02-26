@@ -123,6 +123,7 @@ Fallback: If `test_type` column is missing, uses filename patterns (`prbs_test`,
 - Use `python3` when running Python scripts
 - Uses logging at INFO level by default for operational visibility
 - Usage documentation can be found in @README.md
+- Use the csv-filter agent to extract failure data from csv files
 
 ### Hardware Information
 
@@ -139,19 +140,3 @@ Fallback: If `test_type` column is missing, uses filename patterns (`prbs_test`,
   - Use this information to identify connected ports that are failing together
 - Ethernet ports that connect to cable connectors are routed to other ports that are connected to cable connectors.
   - Try and infer based on failure data which Ethernet ports match up with each other (e.g., cable connector ports that fail on the same run)
-- When asked to analze csv test data, do not parse the provides csv file(s) directly.
-  - Run the @src/filter_failures.py script first on the given csv file to extract the failed port data
-- When looking for failure patterns on connected ports, focus also on the diagnostic data in the train_status dict
-- Refer to `docs/known_failure_signatures.txt` for known failure signatures and store newly found failure signatures in this file for future reference
-- A non-zero `lcpll_lock_fail_cnt` is not an issue unless it results in a failure in the corresponding `test_status` but it is good to note in failure reports
-- Remote device information (`remote_info` in train_status) is often not relevant to failure analysis:
-  - External cable connections show `remote_pcb_type: ORION` with all-zero identifiers when no remote is detected
-  - Internal connections show `remote_pcb_type: UBB` with the remote chip's board ID
-  - This info provides context (internal vs external connection) but is not a key diagnostic indicator
-  - Focus on training metrics (CDR unlock counts, retry counts, timeout values) rather than remote device details
-- When documenting failure signatures in `docs/known_failure_signatures.txt`:
-  - Always include `port_type` (e.g., CHIP_TO_QSFPDD, CHIP_TO_CHIP) and `train_mode` (e.g., AW_MANUAL_EQ, AW_ANLT_MODE) in diagnostic indicators
-  - These values help identify failure patterns and correlations
-  - Do NOT document speculative root causes or investigation recommendations
-  - Keep descriptions factual - document only what is observed in the data
-  - Avoid suggesting firmware changes, timeouts adjustments, or hardware investigations
