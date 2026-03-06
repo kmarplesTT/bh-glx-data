@@ -1,7 +1,0 @@
-[console_scripts]
-bh-analyze-failures = bh_glx_data.failure_analysis.cli:main
-bh-extract-quanta = bh_glx_data.quanta_extraction.cli:main
-bh-filter-failures = bh_glx_data.data_processing.cli:main
-bh-generate-excel = bh_glx_data.excel_reporting.cli:main
-bh-glx-data = bh_glx_data.cli:main
-bh-jira-retrieve = bh_glx_data.jira_integration.cli:main
