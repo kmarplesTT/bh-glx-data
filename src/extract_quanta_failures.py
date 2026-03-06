@@ -107,6 +107,20 @@ def extract_csv_files(archive_path: Path, output_dir: Path, archive_basename: st
 
 def main():
     """Main entry point."""
+    # Deprecation warning
+    import warnings
+    warnings.warn(
+        "\n" + "=" * 80 + "\n"
+        "DEPRECATION WARNING: Direct script execution is deprecated.\n"
+        "Please use the new command: 'bh-extract-quanta'\n"
+        "Example: bh-extract-quanta QC3_UBB_20260128.tar.gz\n"
+        "See documentation for migration guide: docs/migration_guide.md\n"
+        "This script will be removed in version 1.0.0\n"
+        + "=" * 80,
+        DeprecationWarning,
+        stacklevel=2
+    )
+
     import argparse
 
     parser = argparse.ArgumentParser(

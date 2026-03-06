@@ -1,204 +1,563 @@
 # BH Galaxy Data Analysis Tool
 
-A collection of Python tools to collect and analyze test data for BH Galaxy system tests, including Jira CSV retrieval, Quanta failure data extraction, and Excel report generation
+A modern Python package for collecting and analyzing test data for BH Galaxy system tests. Includes tools for Jira CSV retrieval, Quanta failure data extraction, Excel report generation, and platform topology queries.
 
-## Setup
+**Version:** 0.1.0 (Alpha)
+**Python:** 3.10+
+**License:** MIT
 
-### 1. Install Dependencies
+---
+
+## Features
+
+- 🔌 **Jira Integration** - Download CSV test data from Jira tickets
+- 📊 **Excel Reporting** - Generate organized Excel summaries with pivot tables
+- 📦 **Quanta Extraction** - Extract test data from Quanta QC3 test packages
+- 🗺️ **Platform Topology** - Query ETH port connectivity between chips
+- 🛠️ **Data Processing** - Filter and process CSV test data
+- 🎯 **Unified CLI** - Single command with subcommands for all tools
+
+---
+
+## Installation
+
+### Option 1: Development Installation (Recommended)
 
 ```bash
-pip install -r requirements.txt
+# Clone the repository
+git clone <repository-url>
+cd bh-glx-data
+
+# Install in editable mode with development dependencies
+pip install -e ".[dev]"
 ```
 
-### 2. Configure Environment Variables
+### Option 2: User Installation
 
-Copy the example environment file and fill in your Jira credentials:
+```bash
+# Install from local directory
+pip install .
+
+# Or install from git (future)
+pip install git+<repository-url>
+```
+
+After installation, all commands will be available in your PATH:
+```bash
+bh-glx-data --help
+bh-jira-retrieve --help
+bh-filter-failures --help
+# ... etc
+```
+
+---
+
+## Quick Start
+
+### 1. Configure Environment
+
+Copy the example environment file and add your Jira credentials:
 
 ```bash
 cp .env.example .env
 ```
 
-Edit `.env` and add your Jira credentials:
-
+Edit `.env`:
 ```env
 JIRA_SERVER_URL=https://your-jira-instance.atlassian.net
 EMAIL=your-email@example.com
 API_KEY=your-api-token
 ```
 
-**Note**: For Jira Cloud, you'll need to use an [API token](https://support.atlassian.com/atlassian-account/docs/manage-api-tokens-for-your-atlassian-account/) instead of your password.
+**Note:** For Jira Cloud, use an [API token](https://support.atlassian.com/atlassian-account/docs/manage-api-tokens-for-your-atlassian-account/) instead of your password.
 
-### 3. Configure Ticket List
+### 2. Configure Ticket List (Optional)
 
-Edit `config.yaml` and add your Jira ticket keys to the `tickets` list
+Edit `config.yaml` to add Jira ticket keys:
 
-## Usage
+```yaml
+tickets:
+  - SYS-123
+  - SYS-456
+```
 
-### Basic Usage
-
-The script will:
-
-1. Authenticate with Jira using credentials from your `.env` file
-2. Retrieve each ticket specified in `config.yaml`
-3. Find all CSV attachments on each ticket
-4. Download CSV files to the `data/` directory
-5. Display a summary of results
-
-View help for usage instructions
+### 3. Run Your First Command
 
 ```bash
-python3 src/jira_csv_retriever.py --help
+# Download CSV files from Jira
+bh-jira-retrieve --tickets SYS-123 SYS-456
+
+# Filter failures from test data
+bh-filter-failures data_test_results.csv
+
+# Generate Excel summary
+bh-generate-excel --data-dir csv_data/
 ```
 
-### Excel Summary Generation
+---
 
-After downloading CSV files, use the Excel summary generator to create organized Excel files with pivot tables:
+## CLI Reference
 
-The script will:
+### Unified Command Interface
 
-1. Scan all CSV files in the `data/` directory
-2. Group files by system hostname and firmware version
-3. Separate PRBS and Data test types
-4. Compile data from multiple CSV files for each system+firmware combination
-5. Generate Excel files using the `system_data_template.xlsx` template
-6. Update pivot table data sources automatically
-7. Save output files to the `summaries/` directory
-View help for usage instructions:
+The tool provides a unified `bh-glx-data` command with subcommands:
 
 ```bash
-python3 src/excel_summary_generator.py --help
+bh-glx-data <command> [options]
 ```
 
-Output files are named `{hostname}_{firmware_version}.xlsx` (e.g., `bh-glx-b02u02_erisc_v1_7_103.xlsx`)
+**Global Options:**
+- `--verbose, -v` - Enable verbose logging
+- `--log-level` - Set logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+- `--version` - Show version information
+- `--help` - Show help message
 
-### Platform Topology Utility
+**Available Commands:**
+- `jira-retrieve` - Download CSV attachments from Jira
+- `filter-failures` - Filter failed test rows from CSV
+- `generate-excel` - Generate Excel summaries
+- `extract-quanta` - Extract data from Quanta packages
+- `topology` - Query platform topology
 
-Query the ETH port connectivity between chips (PCIe devices) on the BH Galaxy platform. The platform consists of 4 UBBs with 8 chips each (U1-U8), where each chip has 14 ETH ports.
+**Direct Shortcuts:**
+
+For convenience, each command is also available as a standalone script:
+```bash
+bh-jira-retrieve     # Same as: bh-glx-data jira-retrieve
+bh-filter-failures   # Same as: bh-glx-data filter-failures
+bh-generate-excel    # Same as: bh-glx-data generate-excel
+bh-extract-quanta    # Same as: bh-glx-data extract-quanta
+bh-topology          # Same as: bh-glx-data topology
+```
+
+---
+
+## Usage Examples
+
+### Jira CSV Retrieval
+
+Download CSV attachments from Jira tickets:
 
 ```bash
-# Query a specific connection
-python3 src/platform_topology.py 01:00.0 ETH07
+# Download from specific tickets
+bh-jira-retrieve --tickets SYS-123 SYS-456 SYS-789
 
-# Show all connections for a device
-python3 src/platform_topology.py 01:00.0 --all
+# Use tickets from config.yaml
+bh-jira-retrieve
 
-# View detailed help and examples
-python3 src/platform_topology.py --help
+# Custom output directory
+bh-jira-retrieve --tickets SYS-123 --output-dir my_data/
+
+# View detailed help
+bh-jira-retrieve --help
 ```
 
-The utility can be used as a CLI tool or imported as a Python module for programmatic access to the topology data.
-
-### Quanta Failure Data Extraction
-
-Extract test data (CSV files) for failed systems from Quanta QC3 test packages. Quanta is the manufacturing partner that provides QC3 test results in zip file packages. This tool automates the process of:
-
-1. Unzipping QC3 test packages
-2. Analyzing Excel results to identify systems with failures
-3. Extracting test CSV files from nested tar.gz archives
-4. Organizing output by system serial number
-
-```bash
-# Extract failure data from a QC3 test package
-python3 src/extract_quanta_failures.py QC3_UBB_20260128_build.zip
-
-# Specify custom output directory
-python3 src/extract_quanta_failures.py QC3_UBB_20260128_build.zip --output-dir my_failures/
-
-# View help
-python3 src/extract_quanta_failures.py --help
-```
-
-The tool will:
-
-- Scan the Excel file (e.g., `QC3_S7TK_0128_build_test.xlsx`) for non-zero failure counts
-- Find directories matching the failed serial numbers
-- Extract `data_test_*.csv` and `prbs_test_*.csv` files from nested archives
-- Save files to `quanta/` directory (default) with descriptive names
-
-**File Organization:**
-
-```
-QC3_*.zip
-├── QC3_*_test.xlsx                   (analyzed for failures)
-└── 0130/{SN1}_{SN2}_{SN3}_{SN4}/
-    └── QC3_UBB_*.tar.gz
-        └── tt_funtest_ubb_*/
-            └── ft_eth_stress_*.tar.gz
-                └── ft_eth_stress/
-                    ├── data_test_*.csv  (extracted)
-                    └── prbs_test_*.csv  (extracted)
-```
+**What it does:**
+1. Authenticates with Jira using credentials from `.env`
+2. Retrieves specified tickets
+3. Downloads all CSV attachments
+4. Saves to `data/` directory (default)
+5. Displays download summary
 
 ### Filter Test Failures
 
-Filter and extract only the failed test rows from CSV test data files. This utility helps isolate problematic test cases for detailed analysis by identifying rows where the `test_status` column indicates a failure (any value other than `ETH_ACTIVE` or `ETH_UNCONNECTED`).
+Extract only failed test rows from CSV files:
 
 ```bash
-# Filter failures from a test data CSV file
-python3 src/filter_failures.py data_test_results.csv
+# Filter failures from test data
+bh-filter-failures data_test_results.csv
 
-# Specify custom output file location
-python3 src/filter_failures.py data_test_results.csv --output failures.csv
+# Specify custom output file
+bh-filter-failures data_test_results.csv --output failures.csv
+
+# Use custom status column
+bh-filter-failures test.csv --status-column custom_status
 
 # View help
-python3 src/filter_failures.py --help
+bh-filter-failures --help
 ```
 
-The tool will:
+**What it does:**
+- Identifies rows where `test_status` ≠ `ETH_ACTIVE` or `ETH_UNCONNECTED`
+- Creates new CSV with only failures
+- Displays failure breakdown by status type
 
-- Read the input CSV file containing test data
-- Identify all rows where `test_status` is not `ETH_ACTIVE` or `ETH_UNCONNECTED`
-- Write failures to a new CSV file (default: `<input>_failures.csv`)
-- Display a summary breakdown of failure types
-
-**Example output:**
-
+**Example Output:**
 ```
-INFO - Total rows read: 12800
-INFO - Failures found: 2426
-INFO - Failures written to: data_test_results_failures.csv
+Total rows read: 12800
+Failures found: 2426
+Failures written to: data_test_results_failures.csv
 
 Failure breakdown by test_status:
   TRAINING_FAIL: 2426
 ```
 
+### Excel Summary Generation
+
+Generate organized Excel reports with pivot tables:
+
+```bash
+# Process all systems
+bh-generate-excel
+
+# Process specific systems
+bh-generate-excel --systems bh-glx-b02u02 bh-glx-b03u02
+
+# Custom directories
+bh-generate-excel --data-dir csv_data/ --output-dir summaries/
+
+# Custom template
+bh-generate-excel --template my_template.xlsx
+
+# View help
+bh-generate-excel --help
+```
+
+**What it does:**
+1. Scans CSV files in data directory
+2. Groups by system hostname and firmware version
+3. Separates PRBS and Data test types
+4. Compiles data from multiple CSV files
+5. Generates Excel files with pivot tables
+6. Saves to `summaries/` directory
+
+**Output:** `{hostname}_{firmware_version}.xlsx` (e.g., `bh-glx-b02u02_erisc_v1_7_103.xlsx`)
+
+### Quanta QC3 Data Extraction
+
+Extract test data from Quanta QC3 test packages:
+
+```bash
+# Extract from tar.gz archive
+bh-extract-quanta QC3_UBB_20260128.tar.gz
+
+# Custom output directory
+bh-extract-quanta QC3_UBB_20260128.tar.gz --output-dir quanta_data/
+
+# Analyze Excel file for failures
+bh-extract-quanta --analyze QC3_S7TK_0128_build_test.xlsx
+
+# View help
+bh-extract-quanta --help
+```
+
+**What it does:**
+- Opens tar.gz archive
+- Extracts nested tar.gz files
+- Finds `data_test_*.csv` and `prbs_test_*.csv` files
+- Saves with descriptive names to `quanta/` directory
+
+**Analyze Mode:**
+- Reads Excel file
+- Identifies non-zero failure counts
+- Extracts serial numbers of failed systems
+- Displays failure summary
+
+### Platform Topology Queries
+
+Query ETH port connectivity between chips:
+
+```bash
+# Query specific connection
+bh-topology 01:00.0 ETH07
+
+# Show all connections for a device
+bh-topology 01:00.0 --all
+
+# JSON output for scripting
+bh-topology 01:00.0 ETH07 --json
+
+# Bidirectional lookup
+bh-topology 05:00.0 ETH00 --bidirectional
+
+# View help
+bh-topology --help
+```
+
+**Platform Structure:**
+- 4 UBBs (UBB1-UBB4)
+- 8 chips per UBB (U1-U8)
+- 14 ETH ports per chip (ETH00-ETH13)
+- Port categories: unused, unconnected, cable connector, platform connected
+
+**Example Output:**
+```
+UBB1/U1 (01:00.0) ETH07 -> UBB1/U5 (05:00.0) ETH00
+```
+
+---
+
 ## Project Structure
 
-```text
-bh-glx-data/
-├── src/                          # Source code
-│   ├── __init__.py
-│   ├── config.py                 # Configuration management
-│   ├── jira_csv_retriever.py    # Script to retrieve CSV files from Jira
-│   ├── excel_summary_generator.py # Script to generate Excel summaries
-│   ├── extract_quanta_failures.py # Script to extract failure data from QC3 packages
-│   ├── filter_failures.py        # Filter failed test rows from CSV files
-│   ├── analyze_failures.py       # Analyze Excel files for failures
-│   ├── platform_topology.py      # Platform connectivity mapping
-│   └── validate_topology.py      # Topology validation utility
-├── templates/                    # Excel templates
-│   └── system_data_template.xlsx # Template with pivot tables
-├── docs/                         # Documentation and diagrams
-├── data/                         # Downloaded CSV files from Jira (gitignored)
-├── summaries/                    # Generated Excel reports (gitignored)
-├── quanta/                       # Extracted Quanta failure CSV files (gitignored)
-├── .env.example                  # Template for environment variables
-├── .env                          # Actual credentials (gitignored)
-├── config.yaml                   # Ticket list configuration
-├── requirements.txt              # Python dependencies
-├── README.md                     # Project documentation
-├── CLAUDE.md                     # Instructions for Claude Code
-└── .gitignore                    # Git ignore rules
 ```
+bh-glx-data/
+├── pyproject.toml                      # Modern packaging config
+├── requirements.txt                    # Runtime dependencies
+├── requirements-dev.txt                # Development dependencies
+├── README.md                           # This file
+├── CLAUDE.md                           # AI assistant guide
+├── src/bh_glx_data/                    # Main package
+│   ├── __init__.py
+│   ├── cli.py                          # Unified CLI entry point
+│   ├── core/                           # Core abstractions
+│   │   ├── config.py                   # Configuration management
+│   │   ├── models.py                   # Data models
+│   │   └── exceptions.py               # Exception hierarchy
+│   ├── jira_integration/               # Jira data collection
+│   │   ├── client.py                   # Jira API wrapper
+│   │   ├── retriever.py                # CSV download logic
+│   │   └── cli.py                      # CLI interface
+│   ├── data_processing/                # CSV data handling
+│   │   ├── csv_reader.py               # CSV reading utilities
+│   │   ├── filter.py                   # Failure filtering
+│   │   └── cli.py                      # CLI interface
+│   ├── excel_reporting/                # Excel generation
+│   │   ├── generator.py                # Excel creation logic
+│   │   ├── templates.py                # Template management
+│   │   └── cli.py                      # CLI interface
+│   ├── quanta_extraction/              # Quanta QC3 processing
+│   │   ├── extractor.py                # Archive extraction
+│   │   ├── analyzer.py                 # Excel analysis
+│   │   └── cli.py                      # CLI interface
+│   └── hardware/                       # Platform topology
+│       ├── platform_topology.py        # Topology data
+│       └── cli.py                      # CLI interface
+├── tests/                              # Test suite
+│   ├── conftest.py                     # Test fixtures
+│   ├── unit/                           # Unit tests
+│   └── integration/                    # Integration tests
+├── templates/                          # Excel templates
+│   └── system_data_template.xlsx
+├── docs/                               # Documentation
+├── data/                               # CSV data (gitignored)
+├── summaries/                          # Excel reports (gitignored)
+├── quanta/                             # Quanta data (gitignored)
+├── failures/                           # Filtered failures (gitignored)
+└── reports/                            # Analysis reports (gitignored)
+```
+
+---
+
+## Configuration
+
+### Multi-Source Configuration
+
+Configuration is loaded from multiple sources in priority order:
+
+1. **Command-line arguments** (highest priority)
+2. **Environment variables** (`BH_GLX_CONFIG` for config file path)
+3. **User config**: `~/.config/bh-glx-data/config.yaml`
+4. **Local config**: `./config.yaml`
+5. **Built-in defaults** (lowest priority)
+
+### Configuration File Format
+
+`config.yaml`:
+```yaml
+jira:
+  # These can also be set via .env file
+  server_url: https://your-jira.atlassian.net
+  email: your-email@example.com
+  api_key: your-api-token
+
+tickets:
+  - SYS-123
+  - SYS-456
+
+data:
+  input_dir: csv_data
+  output_dir: summaries
+```
+
+### Environment Variables
+
+Create `.env` file:
+```env
+# Jira credentials
+JIRA_SERVER_URL=https://your-jira-instance.atlassian.net
+EMAIL=your-email@example.com
+API_KEY=your-api-token
+
+# Optional: Custom config file location
+BH_GLX_CONFIG=/path/to/config.yaml
+```
+
+---
+
+## Development
+
+### Setup Development Environment
+
+```bash
+# Clone repository
+git clone <repository-url>
+cd bh-glx-data
+
+# Create virtual environment
+python3 -m venv .venv
+source .venv/bin/activate
+
+# Install in development mode
+pip install -e ".[dev]"
+```
+
+### Running Tests
+
+```bash
+# Run all tests
+pytest
+
+# Run with coverage
+pytest --cov=bh_glx_data --cov-report=term-missing
+
+# Run specific test file
+pytest tests/unit/test_hardware.py
+
+# Run integration tests only
+pytest tests/integration/
+
+# Run in parallel
+pytest -n auto
+```
+
+### Code Quality
+
+```bash
+# Format code
+black src/ tests/
+
+# Sort imports
+isort src/ tests/
+
+# Lint code
+pylint src/bh_glx_data/
+
+# Type check
+mypy src/bh_glx_data/
+```
+
+---
+
+## Migration from Old Scripts
+
+**Note:** The old Python scripts in `src/` still work but are deprecated. They will show a deprecation warning when run.
+
+### Old → New Command Mapping
+
+| Old Command | New Command |
+|-------------|-------------|
+| `python3 src/jira_csv_retriever.py` | `bh-jira-retrieve` |
+| `python3 src/filter_failures.py` | `bh-filter-failures` |
+| `python3 src/excel_summary_generator.py` | `bh-generate-excel` |
+| `python3 src/extract_quanta_failures.py` | `bh-extract-quanta` |
+| `python3 src/platform_topology.py` | `bh-topology` |
+
+**See [MIGRATION_GUIDE.md](docs/MIGRATION_GUIDE.md) for detailed migration instructions.**
+
+---
+
+## Troubleshooting
+
+### Installation Issues
+
+**Problem:** `pip install` fails with "requires Python >=3.10"
+**Solution:** Upgrade Python or use a Python 3.10+ virtual environment
+
+**Problem:** Entry points not available after install
+**Solution:** Ensure you're using `pip install` (not `python setup.py install`)
+
+### Runtime Issues
+
+**Problem:** "Module not found" errors
+**Solution:** Ensure package is installed: `pip install -e .`
+
+**Problem:** Jira authentication fails
+**Solution:** Verify `.env` file exists with correct credentials and API token (not password)
+
+**Problem:** Template file not found
+**Solution:** Ensure `templates/system_data_template.xlsx` exists in project root
+
+### Getting Help
+
+```bash
+# View general help
+bh-glx-data --help
+
+# View command-specific help
+bh-jira-retrieve --help
+bh-filter-failures --help
+# ... etc
+
+# Enable verbose logging
+bh-glx-data --verbose <command> [options]
+
+# Set debug logging
+bh-glx-data --log-level DEBUG <command> [options]
+```
+
+---
 
 ## Security
 
-- Credentials are stored in `.env` file which is gitignored
-- Never commit the `.env` file to version control
-- `config.yaml` contains only ticket keys (no secrets) and can be safely committed
-- Use API tokens instead of passwords for Jira Cloud instances
+- ✅ Credentials stored in `.env` (gitignored, never committed)
+- ✅ `config.yaml` contains only ticket keys (no secrets)
+- ✅ Use API tokens instead of passwords for Jira Cloud
+- ✅ Follow principle of least privilege for Jira permissions
+
+---
 
 ## Requirements
 
-- Python 3.10+
-- Jira account with appropriate permissions to access tickets and attachments
+- **Python:** 3.10 or higher
+- **Platform:** Linux, macOS, Windows
+- **Dependencies:** See `requirements.txt`
+- **Optional:** Jira account for CSV retrieval
+
+---
+
+## Contributing
+
+Contributions are welcome! Please:
+
+1. Fork the repository
+2. Create a feature branch
+3. Write tests for new features
+4. Ensure tests pass: `pytest`
+5. Format code: `black src/ tests/`
+6. Submit a pull request
+
+---
+
+## License
+
+MIT License - See LICENSE file for details
+
+---
+
+## Support
+
+- **Documentation:** See `docs/` directory
+- **Issues:** Report bugs via GitHub issues
+- **Questions:** See CLAUDE.md for development guidelines
+
+---
+
+## Changelog
+
+### Version 0.1.0 (2026-03-05)
+
+**Initial Release**
+
+- ✨ Modern Python package with src layout
+- ✨ Unified CLI with subcommands
+- ✨ 5 domain modules with clear boundaries
+- ✨ Comprehensive error handling
+- ✨ Data models with type safety
+- ✨ Multi-source configuration management
+- ✨ Test suite with >50% coverage
+- ⚠️ Backwards compatible with old scripts (deprecated)
+
+---
+
+**Last Updated:** 2026-03-05
+**Package Version:** 0.1.0

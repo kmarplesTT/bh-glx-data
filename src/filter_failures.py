@@ -78,6 +78,20 @@ def filter_failures(input_file: Path, output_file: Path = None) -> None:
 
 
 def main():
+    # Deprecation warning
+    import warnings
+    warnings.warn(
+        "\n" + "=" * 80 + "\n"
+        "DEPRECATION WARNING: Direct script execution is deprecated.\n"
+        "Please use the new command: 'bh-filter-failures'\n"
+        "Example: bh-filter-failures data_test_results.csv\n"
+        "See documentation for migration guide: docs/migration_guide.md\n"
+        "This script will be removed in version 1.0.0\n"
+        + "=" * 80,
+        DeprecationWarning,
+        stacklevel=2
+    )
+
     parser = argparse.ArgumentParser(
         description="Filter test failures from data test CSV files",
         formatter_class=argparse.RawDescriptionHelpFormatter,

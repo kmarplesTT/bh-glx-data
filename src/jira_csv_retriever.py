@@ -214,6 +214,20 @@ def main():
     Main entry point for the script.
     Reads ticket keys from command-line arguments or config.yaml file.
     """
+    # Deprecation warning
+    import warnings
+    warnings.warn(
+        "\n" + "=" * 80 + "\n"
+        "DEPRECATION WARNING: Direct script execution is deprecated.\n"
+        "Please use the new command: 'bh-jira-retrieve'\n"
+        "Example: bh-jira-retrieve --tickets SYS-123 SYS-456\n"
+        "See documentation for migration guide: docs/migration_guide.md\n"
+        "This script will be removed in version 1.0.0\n"
+        + "=" * 80,
+        DeprecationWarning,
+        stacklevel=2
+    )
+
     # Parse command-line arguments
     args = parse_arguments()
 

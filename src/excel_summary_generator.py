@@ -528,6 +528,20 @@ def main():
     """
     Main entry point for the script.
     """
+    # Deprecation warning
+    import warnings
+    warnings.warn(
+        "\n" + "=" * 80 + "\n"
+        "DEPRECATION WARNING: Direct script execution is deprecated.\n"
+        "Please use the new command: 'bh-generate-excel'\n"
+        "Example: bh-generate-excel --data-dir csv_data/\n"
+        "See documentation for migration guide: docs/migration_guide.md\n"
+        "This script will be removed in version 1.0.0\n"
+        + "=" * 80,
+        DeprecationWarning,
+        stacklevel=2
+    )
+
     # Parse command-line arguments
     args = parse_arguments()
 

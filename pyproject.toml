@@ -1,0 +1,141 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bh-glx-data"
+version = "0.1.0"
+description = "BH Galaxy Data Analysis Tool - A collection of Python tools for analyzing test data for BH Galaxy systems"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [
+    {name = "BH Galaxy Team"}
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Topic :: Software Development :: Testing",
+    "Topic :: System :: Hardware",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+
+dependencies = [
+    "jira>=3.5.0",
+    "python-dotenv>=1.0.0",
+    "pandas>=2.0.0",
+    "matplotlib>=3.7.0",
+    "seaborn>=0.12.0",
+    "pyyaml>=6.0",
+    "openpyxl>=3.1.0",
+    "tqdm>=4.65.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    # Testing
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "pytest-mock>=3.10",
+    "pytest-xdist>=3.0",
+    # Code Quality
+    "black>=23.0",
+    "isort>=5.12",
+    "pylint>=2.17",
+    "mypy>=1.0",
+    "flake8>=6.0",
+    "types-PyYAML>=6.0",
+    # Development
+    "ipython>=8.0",
+    "ipdb>=0.13",
+]
+
+[project.scripts]
+bh-glx-data = "bh_glx_data.cli:main"
+bh-jira-retrieve = "bh_glx_data.jira_integration.cli:main"
+bh-extract-quanta = "bh_glx_data.quanta_extraction.cli:main"
+bh-filter-failures = "bh_glx_data.data_processing.cli:main"
+bh-generate-excel = "bh_glx_data.excel_reporting.cli:main"
+bh-topology = "bh_glx_data.hardware.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["bh_glx_data*"]
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "--verbose",
+    "--cov=bh_glx_data",
+    "--cov-report=term-missing",
+    "--cov-report=html",
+    "--cov-fail-under=80",
+]
+
+[tool.black]
+line-length = 100
+target-version = ["py310", "py311", "py312"]
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  # directories
+  \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | build
+  | dist
+)/
+'''
+
+[tool.isort]
+profile = "black"
+line_length = 100
+multi_line_output = 3
+include_trailing_comma = true
+force_grid_wrap = 0
+use_parentheses = true
+ensure_newline_before_comments = true
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false  # Gradual typing
+check_untyped_defs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+strict_optional = true
+
+[[tool.mypy.overrides]]
+module = [
+    "jira",
+    "openpyxl",
+    "pandas",
+    "matplotlib",
+    "seaborn",
+]
+ignore_missing_imports = true
+
+[tool.pylint.messages_control]
+max-line-length = 100
+disable = [
+    "C0103",  # Invalid name
+    "C0114",  # Missing module docstring
+    "R0913",  # Too many arguments
+    "R0914",  # Too many local variables
+]
