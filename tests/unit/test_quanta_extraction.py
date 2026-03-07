@@ -411,9 +411,10 @@ class TestExtractCSVFromArchive:
 
         result = extract_csv_from_archive(archive_path, output_dir)
 
-        # Should succeed but with errors
+        # Should complete but with no files extracted and error message
         assert len(result.extracted_files) == 0
-        assert len(result.errors) > 0
+        assert result.success is False
+        assert result.error_message is not None
 
     @patch("tarfile.open")
     def test_extract_csv_from_archive_with_basename(self, mock_tarfile_open, tmp_path):
@@ -494,7 +495,8 @@ class TestExtractCSVFromArchive:
         assert output_dir.exists()
 
     @patch("tarfile.open")
-    def test_extract_csv_from_archive_handles_burnin(self, mock_tarfile_open, tmp_path):
+    @patch("shutil.copy2")
+    def test_extract_csv_from_archive_handles_burnin(self, mock_copy, mock_tarfile_open, tmp_path):
         """Test extracting from burnin archives."""
         archive_path = tmp_path / "test.tar.gz"
         archive_path.touch()

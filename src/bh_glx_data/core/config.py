@@ -72,7 +72,7 @@ class ConfigManager:
         # Search default paths
         for path in ConfigManager.CONFIG_SEARCH_PATHS:
             if path.exists():
-                return path
+                return path.resolve()
 
         return None
 

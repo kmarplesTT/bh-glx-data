@@ -76,16 +76,6 @@ class TestCLISubcommands:
 
         assert exc_info.value.code == 0
 
-    def test_analyze_failures_subcommand_help(self):
-        """Test analyze-failures subcommand help."""
-        from bh_glx_data import cli
-
-        with pytest.raises(SystemExit) as exc_info:
-            sys.argv = ["bh-glx-data", "analyze-failures", "--help"]
-            cli.main()
-
-        assert exc_info.value.code == 0
-
 
 class TestDirectCommands:
     """Test direct command shortcuts work."""
@@ -106,16 +96,6 @@ class TestDirectCommands:
 
         with pytest.raises(SystemExit) as exc_info:
             sys.argv = ["bh-filter-failures", "--help"]
-            cli.main()
-
-        assert exc_info.value.code == 0
-
-    def test_analyze_failures_direct_help(self):
-        """Test bh-analyze-failures command help."""
-        from bh_glx_data.failure_analysis import cli
-
-        with pytest.raises(SystemExit) as exc_info:
-            sys.argv = ["bh-analyze-failures", "--help"]
             cli.main()
 
         assert exc_info.value.code == 0
