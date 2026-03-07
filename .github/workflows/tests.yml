@@ -33,7 +33,7 @@ jobs:
 
     - name: Run unit tests
       run: |
-        pytest tests/unit/ -v --tb=short --cov=src/bh_glx_data --cov-report=term-missing
+        pytest tests/unit/ -v --tb=short --cov=bh_glx_data --cov-report=term-missing
 
     - name: Run integration tests
       run: |
@@ -42,7 +42,7 @@ jobs:
     - name: Generate coverage report
       if: matrix.python-version == '3.11'
       run: |
-        pytest tests/ --cov=src/bh_glx_data --cov-report=xml --cov-report=html
+        pytest tests/ --cov=bh_glx_data --cov-report=xml --cov-report=html
 
     - name: Upload coverage to artifacts
       if: matrix.python-version == '3.11'

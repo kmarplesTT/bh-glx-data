@@ -1,14 +1,33 @@
 """CSV reading and validation utilities."""
 
 import logging
+import re
 from pathlib import Path
 from typing import List, Optional
 
 import pandas as pd
 
-from bh_glx_data.core.exceptions import CSVParseError
+from bh_glx_data.core.exceptions import CSVParseError, DataProcessingError
 
 logger = logging.getLogger(__name__)
+
+
+def read_csv_with_validation(file_path: Path) -> pd.DataFrame:
+    """Read and validate a CSV file.
+
+    Args:
+        file_path: Path to CSV file
+
+    Returns:
+        pandas DataFrame with CSV data
+
+    Raises:
+        DataProcessingError: If file cannot be read or parsed
+    """
+    try:
+        return read_csv(file_path)
+    except CSVParseError as e:
+        raise DataProcessingError(str(e)) from e
 
 
 def read_csv(file_path: Path) -> pd.DataFrame:
@@ -54,7 +73,7 @@ def validate_csv_schema(
     df: pd.DataFrame,
     required_columns: List[str],
     file_path: Optional[Path] = None,
-) -> None:
+) -> bool:
     """Validate that a DataFrame has required columns.
 
     Args:
@@ -62,9 +81,20 @@ def validate_csv_schema(
         required_columns: List of required column names
         file_path: Optional path for error messages
 
+    Returns:
+        True if validation passes
+
     Raises:
-        CSVParseError: If required columns are missing
+        DataProcessingError: If DataFrame is empty or columns are missing
     """
+    # Check if DataFrame is empty
+    if len(df) == 0 and len(df.columns) == 0:
+        if required_columns:
+            raise DataProcessingError(
+                f"CSV file is empty but required columns were specified: {', '.join(required_columns)}"
+            )
+        return True
+
     missing_columns = [col for col in required_columns if col not in df.columns]
 
     if missing_columns:
@@ -72,10 +102,64 @@ def validate_csv_schema(
         if file_path:
             error_msg += f"\nAvailable columns: {', '.join(df.columns)}"
 
-        raise CSVParseError(
-            error_msg,
-            file_path=str(file_path) if file_path else None,
-        )
+        raise DataProcessingError(error_msg)
+
+    return True
+
+
+def extract_firmware_version(filename: str) -> Optional[str]:
+    """Extract firmware version from filename.
+
+    Supports patterns like:
+    - erisc_v1_7_103
+    - v1_7_103
+    - v2_0_0
+
+    Args:
+        filename: Filename to parse
+
+    Returns:
+        Firmware version string or None if not found
+    """
+    if not filename:
+        return None
+
+    # Try to match erisc format first (erisc_v#_#_#)
+    erisc_match = re.search(r'erisc_v\d+_\d+_\d+', filename)
+    if erisc_match:
+        return erisc_match.group(0)
+
+    # Try to match v format (v#_#_# or v#_#_#_#)
+    v_match = re.search(r'v\d+_\d+_\d+(?:_\d+)?', filename)
+    if v_match:
+        return v_match.group(0)
+
+    return None
+
+
+def extract_hostname_from_csv(file_path: Path) -> Optional[str]:
+    """Extract hostname from CSV file.
+
+    Looks for a 'host' column and returns the first non-empty value.
+
+    Args:
+        file_path: Path to CSV file
+
+    Returns:
+        Hostname string or None if not found
+    """
+    try:
+        df = read_csv(file_path)
+        if "host" in df.columns:
+            # Get first non-empty hostname
+            hostnames = df["host"].dropna().unique()
+            if len(hostnames) > 0:
+                first_hostname = hostnames[0]
+                if first_hostname and str(first_hostname).strip():
+                    return str(first_hostname)
+        return None
+    except CSVParseError:
+        return None
 
 
 def get_column_safe(df: pd.DataFrame, column_name: str, default=None) -> pd.Series:

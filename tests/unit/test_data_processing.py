@@ -305,7 +305,7 @@ class TestFilterResultModel:
             output_file=Path("output.csv"),
             total_rows=100,
             failure_count=10,
-            status_breakdown={"TRAINING_FAIL": 5, "LINK_DOWN": 5},
+            failure_breakdown={"TRAINING_FAIL": 5, "LINK_DOWN": 5},
             success=True,
             error_message=None,
         )
@@ -313,7 +313,7 @@ class TestFilterResultModel:
         assert result.success
         assert result.total_rows == 100
         assert result.failure_count == 10
-        assert len(result.status_breakdown) == 2
+        assert len(result.failure_breakdown) == 2
 
 
 class TestEdgeCases:

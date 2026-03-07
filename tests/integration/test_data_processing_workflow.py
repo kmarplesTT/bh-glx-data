@@ -14,17 +14,17 @@ from bh_glx_data.data_processing.filter import filter_failures
 class TestDataProcessingWorkflow:
     """Test complete data processing workflow from CSV reading to filtering."""
 
-    def test_read_and_filter_workflow(self, tmp_path, sample_test_data_csv):
+    def test_read_and_filter_workflow(self, tmp_path, sample_csv_file):
         """Test reading CSV and filtering failures."""
         # Step 1: Read CSV
-        df = read_csv_with_validation(sample_test_data_csv)
+        df = read_csv_with_validation(sample_csv_file)
         assert df is not None
         assert len(df) > 0
         assert "test_status" in df.columns
 
         # Step 2: Filter failures
         output_file = tmp_path / "failures.csv"
-        result = filter_failures(sample_test_data_csv, output_file)
+        result = filter_failures(sample_csv_file, output_file)
 
         assert result.success
         assert result.failure_count >= 0
@@ -94,9 +94,9 @@ class TestDataProcessingWorkflow:
 class TestCSVReaderValidation:
     """Test CSV reader validation."""
 
-    def test_read_valid_csv(self, sample_test_data_csv):
+    def test_read_valid_csv(self, sample_csv_file):
         """Test reading a valid CSV file."""
-        df = read_csv_with_validation(sample_test_data_csv)
+        df = read_csv_with_validation(sample_csv_file)
         assert df is not None
         assert isinstance(df, pd.DataFrame)
         assert len(df) > 0
