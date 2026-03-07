@@ -104,7 +104,7 @@ class TestGetNumericValue:
 class TestAnalyzeExcelFailures:
     """Test analyze_excel_failures function."""
 
-    @patch('bh_glx_data.quanta_extraction.analyzer.load_workbook')
+    @patch("bh_glx_data.quanta_extraction.analyzer.load_workbook")
     def test_analyze_excel_failures_with_openpyxl(self, mock_load_wb, tmp_path):
         """Test analyzing Excel file with openpyxl."""
         excel_file = tmp_path / "test.xlsx"
@@ -149,9 +149,9 @@ class TestAnalyzeExcelFailures:
         assert failures[0].failure_count == 5
         assert failures[0].test_type == "DATA"
 
-    @patch('bh_glx_data.quanta_extraction.analyzer.HAS_OPENPYXL', False)
-    @patch('bh_glx_data.quanta_extraction.analyzer.HAS_PANDAS', True)
-    @patch('bh_glx_data.quanta_extraction.analyzer.pd.read_excel')
+    @patch("bh_glx_data.quanta_extraction.analyzer.HAS_OPENPYXL", False)
+    @patch("bh_glx_data.quanta_extraction.analyzer.HAS_PANDAS", True)
+    @patch("bh_glx_data.quanta_extraction.analyzer.pd.read_excel")
     def test_analyze_excel_failures_with_pandas(self, mock_read_excel, tmp_path):
         """Test analyzing Excel file with pandas."""
         excel_file = tmp_path / "test.xlsx"
@@ -159,20 +159,20 @@ class TestAnalyzeExcelFailures:
 
         # Mock DataFrame
         df_data = {
-            'col1': ['x', 'y'],
-            'col2': ['x', 'y'],
-            'SN': ['SN123', 'SN456'],  # Column C (index 2)
-            'col4': ['x', 'y'],
-            'col5': ['x', 'y'],
-            'col6': ['x', 'y'],
-            'col7': ['x', 'y'],
-            'col8': ['x', 'y'],
-            'col9': ['x', 'y'],
-            'ASIC': ['ASIC1', 'ASIC2'],  # Column J (index 9)
-            'PORT': ['PORT1', 'PORT2'],  # Column K (index 10)
-            'col12': ['x', 'y'],
-            'TYPE': ['DATA', 'PRBS'],  # Column M (index 12)
-            'Failure Count': [5, 0],  # Column N (index 13)
+            "col1": ["x", "y"],
+            "col2": ["x", "y"],
+            "SN": ["SN123", "SN456"],  # Column C (index 2)
+            "col4": ["x", "y"],
+            "col5": ["x", "y"],
+            "col6": ["x", "y"],
+            "col7": ["x", "y"],
+            "col8": ["x", "y"],
+            "col9": ["x", "y"],
+            "ASIC": ["ASIC1", "ASIC2"],  # Column J (index 9)
+            "PORT": ["PORT1", "PORT2"],  # Column K (index 10)
+            "col12": ["x", "y"],
+            "TYPE": ["DATA", "PRBS"],  # Column M (index 12)
+            "Failure Count": [5, 0],  # Column N (index 13)
         }
         mock_df = pd.DataFrame(df_data)
         mock_read_excel.return_value = mock_df
@@ -194,8 +194,8 @@ class TestAnalyzeExcelFailures:
 
         assert "not found" in str(exc_info.value)
 
-    @patch('bh_glx_data.quanta_extraction.analyzer.HAS_OPENPYXL', False)
-    @patch('bh_glx_data.quanta_extraction.analyzer.HAS_PANDAS', False)
+    @patch("bh_glx_data.quanta_extraction.analyzer.HAS_OPENPYXL", False)
+    @patch("bh_glx_data.quanta_extraction.analyzer.HAS_PANDAS", False)
     def test_analyze_excel_failures_no_libraries(self, tmp_path):
         """Test analyzing when neither library is available."""
         excel_file = tmp_path / "test.xlsx"
@@ -332,7 +332,7 @@ class TestExtractCSVFromArchive:
 
         assert "Expected a .tar.gz file" in str(exc_info.value)
 
-    @patch('tarfile.open')
+    @patch("tarfile.open")
     def test_extract_csv_from_archive_no_funtest(self, mock_tarfile_open, tmp_path):
         """Test extracting when no funtest archives found."""
         archive_path = tmp_path / "test.tar.gz"
@@ -350,8 +350,8 @@ class TestExtractCSVFromArchive:
         assert result.total_files == 0
         assert "ft_eth_stress" in result.error_message or "ft_burnin" in result.error_message
 
-    @patch('tarfile.open')
-    @patch('shutil.copy2')
+    @patch("tarfile.open")
+    @patch("shutil.copy2")
     def test_extract_csv_from_archive_success(self, mock_copy, mock_tarfile_open, tmp_path):
         """Test successful CSV extraction."""
         archive_path = tmp_path / "test.tar.gz"
@@ -387,7 +387,7 @@ class TestExtractCSVFromArchive:
         assert result.total_files == 1
         assert len(result.extracted_files) == 1
 
-    @patch('tarfile.open')
+    @patch("tarfile.open")
     def test_extract_csv_from_archive_no_csv_files(self, mock_tarfile_open, tmp_path):
         """Test extracting when no CSV files found in archive."""
         archive_path = tmp_path / "test.tar.gz"
@@ -415,7 +415,7 @@ class TestExtractCSVFromArchive:
         assert len(result.extracted_files) == 0
         assert len(result.errors) > 0
 
-    @patch('tarfile.open')
+    @patch("tarfile.open")
     def test_extract_csv_from_archive_with_basename(self, mock_tarfile_open, tmp_path):
         """Test extraction with custom basename."""
         archive_path = tmp_path / "test.tar.gz"
@@ -449,7 +449,7 @@ class TestExtractCSVFromArchive:
         if result.extracted_files:
             assert "custom_name" in str(result.extracted_files[0])
 
-    @patch('tarfile.open')
+    @patch("tarfile.open")
     def test_extract_csv_from_archive_tar_error(self, mock_tarfile_open, tmp_path):
         """Test handling tarfile error."""
         archive_path = tmp_path / "test.tar.gz"
@@ -463,7 +463,7 @@ class TestExtractCSVFromArchive:
 
         assert "Error reading archive" in str(exc_info.value)
 
-    @patch('tarfile.open')
+    @patch("tarfile.open")
     def test_extract_csv_from_archive_os_error(self, mock_tarfile_open, tmp_path):
         """Test handling OS error."""
         archive_path = tmp_path / "test.tar.gz"
@@ -477,7 +477,7 @@ class TestExtractCSVFromArchive:
 
         assert "OS error" in str(exc_info.value)
 
-    @patch('tarfile.open')
+    @patch("tarfile.open")
     def test_extract_csv_from_archive_creates_output_dir(self, mock_tarfile_open, tmp_path):
         """Test that output directory is created."""
         archive_path = tmp_path / "test.tar.gz"
@@ -493,7 +493,7 @@ class TestExtractCSVFromArchive:
 
         assert output_dir.exists()
 
-    @patch('tarfile.open')
+    @patch("tarfile.open")
     def test_extract_csv_from_archive_handles_burnin(self, mock_tarfile_open, tmp_path):
         """Test extracting from burnin archives."""
         archive_path = tmp_path / "test.tar.gz"

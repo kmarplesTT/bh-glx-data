@@ -8,7 +8,6 @@ from pathlib import Path
 # Import CLI modules
 from bh_glx_data.data_processing.cli import main as filter_main
 from bh_glx_data.excel_reporting.cli import main as excel_main
-from bh_glx_data.failure_analysis.cli import main as analyze_main
 from bh_glx_data.hardware.cli import main as topology_main
 from bh_glx_data.jira_integration.cli import main as jira_main
 from bh_glx_data.quanta_extraction.cli import main as quanta_main
@@ -32,7 +31,6 @@ Available Commands:
   filter-failures  Filter failed test rows from CSV files
   generate-excel   Generate Excel summaries from CSV test data
   extract-quanta   Extract test data from Quanta QC3 packages
-  analyze-failures Analyze test failures and generate reports
   topology         Query platform ETH port connectivity
 
 Examples:
@@ -48,9 +46,6 @@ Examples:
   # Extract Quanta failure data
   bh-glx-data extract-quanta QC3_UBB_20260128.tar.gz
 
-  # Analyze failures and generate reports
-  bh-glx-data analyze-failures --failures-dir failures/
-
   # Query platform topology
   bh-glx-data topology 01:00.0 ETH07
 
@@ -63,7 +58,6 @@ Direct Command Shortcuts:
   - bh-filter-failures (same as: bh-glx-data filter-failures)
   - bh-generate-excel (same as: bh-glx-data generate-excel)
   - bh-extract-quanta (same as: bh-glx-data extract-quanta)
-  - bh-analyze-failures (same as: bh-glx-data analyze-failures)
   - bh-topology (same as: bh-glx-data topology)
         """,
     )
@@ -173,33 +167,6 @@ Direct Command Shortcuts:
         "--analyze", type=Path, help="Analyze Excel file for failures (e.g., QC3_test.xlsx)"
     )
 
-    # Analyze Failures
-    analyze_parser = subparsers.add_parser(
-        "analyze-failures",
-        help="Analyze test failures and generate reports",
-        description="Analyze failure patterns and generate diagnostic reports",
-    )
-    analyze_parser.add_argument(
-        "--failures-dir",
-        type=Path,
-        default=Path("failures"),
-        help="Directory containing failure CSV files (default: failures/)",
-    )
-    analyze_parser.add_argument(
-        "--output-dir",
-        type=Path,
-        default=Path("reports"),
-        help="Output directory for reports (default: reports/)",
-    )
-    analyze_parser.add_argument(
-        "--pattern", default="data_test_*_failures.csv", help="Glob pattern for failure files"
-    )
-    analyze_parser.add_argument("--system", help="System identifier for diagnostic report")
-    analyze_parser.add_argument("--firmware", help="Firmware version for diagnostic report")
-    analyze_parser.add_argument(
-        "--cleanup", action="store_true", help="Delete failure CSV files after analysis"
-    )
-
     # Topology
     topology_parser = subparsers.add_parser(
         "topology",
@@ -269,8 +236,6 @@ def main():
             excel_main()
         elif args.command == "extract-quanta":
             quanta_main()
-        elif args.command == "analyze-failures":
-            analyze_main()
         elif args.command == "topology":
             topology_main()
         else:

@@ -250,40 +250,54 @@ class TestTopologyConsistency:
             # Each forward connection should have a reverse
             assert dest in PLATFORM_TOPOLOGY, f"Missing reverse connection for {source} -> {dest}"
             # And the reverse should point back to source
-            assert PLATFORM_TOPOLOGY[dest] == source, f"Reverse connection mismatch: {dest} does not point back to {source}"
+            assert (
+                PLATFORM_TOPOLOGY[dest] == source
+            ), f"Reverse connection mismatch: {dest} does not point back to {source}"
 
     def test_no_self_connections(self):
         """Test that no port connects to itself."""
         for (src_bus, src_port), (dst_bus, dst_port) in PLATFORM_TOPOLOGY.items():
-            assert not (src_bus == dst_bus and src_port == dst_port), f"Self-connection found: {src_bus} {src_port}"
+            assert not (
+                src_bus == dst_bus and src_port == dst_port
+            ), f"Self-connection found: {src_bus} {src_port}"
 
     def test_cable_ports_not_in_topology(self):
         """Test that cable connector ports are not in topology."""
         for chip_num, cable_ports in CABLE_CONNECTOR_PORTS_BY_CHIP.items():
             # Get bus IDs for this chip across all UBBs
-            bus_prefixes = ['0', '4', 'c', '8']  # UBB1, UBB2, UBB3, UBB4
+            bus_prefixes = ["0", "4", "c", "8"]  # UBB1, UBB2, UBB3, UBB4
             for prefix in bus_prefixes:
                 bus_id = f"{prefix}{chip_num}:00.0"
                 for port in cable_ports:
                     # Cable connector ports should not be in topology
-                    assert (bus_id, port) not in PLATFORM_TOPOLOGY, \
+                    assert (
+                        bus_id,
+                        port,
+                    ) not in PLATFORM_TOPOLOGY, (
                         f"Cable connector port {bus_id} {port} should not be in topology"
+                    )
 
     def test_unused_ports_not_in_topology(self):
         """Test that unused ports are not in topology."""
         # Check all devices
         for bus_id in ["01:00.0", "02:00.0", "41:00.0", "c1:00.0", "81:00.0"]:
             for port in UNUSED_PORTS:
-                assert (bus_id, port) not in PLATFORM_TOPOLOGY, \
-                    f"Unused port {bus_id} {port} should not be in topology"
+                assert (
+                    bus_id,
+                    port,
+                ) not in PLATFORM_TOPOLOGY, f"Unused port {bus_id} {port} should not be in topology"
 
     def test_unconnected_ports_not_in_topology(self):
         """Test that unconnected ports are not in topology."""
         # Check all devices
         for bus_id in ["01:00.0", "02:00.0", "41:00.0", "c1:00.0", "81:00.0"]:
             for port in UNCONNECTED_PORTS:
-                assert (bus_id, port) not in PLATFORM_TOPOLOGY, \
+                assert (
+                    bus_id,
+                    port,
+                ) not in PLATFORM_TOPOLOGY, (
                     f"Unconnected port {bus_id} {port} should not be in topology"
+                )
 
 
 class TestEdgeCases:

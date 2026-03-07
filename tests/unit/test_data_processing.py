@@ -22,15 +22,15 @@ class TestCSVReader:
     def test_read_csv_with_validation_success(self, tmp_path):
         """Test successful CSV reading."""
         csv_file = tmp_path / "test.csv"
-        with open(csv_file, 'w', newline='') as f:
+        with open(csv_file, "w", newline="") as f:
             writer = csv.writer(f)
-            writer.writerow(['bus_id', 'ETH ID', 'test_status'])
-            writer.writerow(['01:00.0', 'ETH00', 'ETH_ACTIVE'])
+            writer.writerow(["bus_id", "ETH ID", "test_status"])
+            writer.writerow(["01:00.0", "ETH00", "ETH_ACTIVE"])
 
         df = read_csv_with_validation(csv_file)
         assert isinstance(df, pd.DataFrame)
         assert len(df) == 1
-        assert 'bus_id' in df.columns
+        assert "bus_id" in df.columns
 
     def test_read_csv_nonexistent_file(self, tmp_path):
         """Test reading nonexistent file raises error."""
@@ -55,7 +55,7 @@ class TestCSVReader:
     def test_read_csv_malformed(self, tmp_path):
         """Test reading malformed CSV."""
         malformed = tmp_path / "malformed.csv"
-        with open(malformed, 'w') as f:
+        with open(malformed, "w") as f:
             f.write("not,valid,csv\n")
             f.write("missing,columns\n")  # Inconsistent columns
 
@@ -74,23 +74,19 @@ class TestCSVSchemaValidation:
 
     def test_validate_schema_with_required_columns(self):
         """Test schema validation with all required columns."""
-        df = pd.DataFrame({
-            'bus_id': ['01:00.0'],
-            'test_status': ['ETH_ACTIVE'],
-            'ETH ID': ['ETH00']
-        })
+        df = pd.DataFrame(
+            {"bus_id": ["01:00.0"], "test_status": ["ETH_ACTIVE"], "ETH ID": ["ETH00"]}
+        )
 
-        required_columns = ['bus_id', 'test_status']
+        required_columns = ["bus_id", "test_status"]
         result = validate_csv_schema(df, required_columns)
         assert result is True
 
     def test_validate_schema_missing_columns(self):
         """Test schema validation with missing columns."""
-        df = pd.DataFrame({
-            'bus_id': ['01:00.0']
-        })
+        df = pd.DataFrame({"bus_id": ["01:00.0"]})
 
-        required_columns = ['bus_id', 'test_status']
+        required_columns = ["bus_id", "test_status"]
 
         with pytest.raises(DataProcessingError) as exc_info:
             validate_csv_schema(df, required_columns)
@@ -102,7 +98,7 @@ class TestCSVSchemaValidation:
         """Test schema validation with empty DataFrame."""
         df = pd.DataFrame()
 
-        required_columns = ['bus_id']
+        required_columns = ["bus_id"]
 
         with pytest.raises(DataProcessingError) as exc_info:
             validate_csv_schema(df, required_columns)
@@ -111,9 +107,7 @@ class TestCSVSchemaValidation:
 
     def test_validate_schema_no_requirements(self):
         """Test schema validation with no requirements."""
-        df = pd.DataFrame({
-            'col1': [1, 2, 3]
-        })
+        df = pd.DataFrame({"col1": [1, 2, 3]})
 
         result = validate_csv_schema(df, [])
         assert result is True
@@ -156,22 +150,22 @@ class TestHostnameExtraction:
     def test_extract_hostname_from_csv_with_host_column(self, tmp_path):
         """Test extracting hostname when host column exists."""
         csv_file = tmp_path / "test.csv"
-        with open(csv_file, 'w', newline='') as f:
+        with open(csv_file, "w", newline="") as f:
             writer = csv.writer(f)
-            writer.writerow(['host', 'bus_id', 'test_status'])
-            writer.writerow(['bh-glx-b02u02', '01:00.0', 'ETH_ACTIVE'])
-            writer.writerow(['bh-glx-b02u02', '02:00.0', 'ETH_ACTIVE'])
+            writer.writerow(["host", "bus_id", "test_status"])
+            writer.writerow(["bh-glx-b02u02", "01:00.0", "ETH_ACTIVE"])
+            writer.writerow(["bh-glx-b02u02", "02:00.0", "ETH_ACTIVE"])
 
         hostname = extract_hostname_from_csv(csv_file)
-        assert hostname == 'bh-glx-b02u02'
+        assert hostname == "bh-glx-b02u02"
 
     def test_extract_hostname_no_host_column(self, tmp_path):
         """Test extracting hostname when host column doesn't exist."""
         csv_file = tmp_path / "test.csv"
-        with open(csv_file, 'w', newline='') as f:
+        with open(csv_file, "w", newline="") as f:
             writer = csv.writer(f)
-            writer.writerow(['bus_id', 'test_status'])
-            writer.writerow(['01:00.0', 'ETH_ACTIVE'])
+            writer.writerow(["bus_id", "test_status"])
+            writer.writerow(["01:00.0", "ETH_ACTIVE"])
 
         hostname = extract_hostname_from_csv(csv_file)
         assert hostname is None
@@ -179,14 +173,14 @@ class TestHostnameExtraction:
     def test_extract_hostname_empty_values(self, tmp_path):
         """Test extracting hostname when all values are empty."""
         csv_file = tmp_path / "test.csv"
-        with open(csv_file, 'w', newline='') as f:
+        with open(csv_file, "w", newline="") as f:
             writer = csv.writer(f)
-            writer.writerow(['host', 'bus_id'])
-            writer.writerow(['', '01:00.0'])
-            writer.writerow(['', '02:00.0'])
+            writer.writerow(["host", "bus_id"])
+            writer.writerow(["", "01:00.0"])
+            writer.writerow(["", "02:00.0"])
 
         hostname = extract_hostname_from_csv(csv_file)
-        assert hostname is None or hostname == ''
+        assert hostname is None or hostname == ""
 
 
 class TestFailureFiltering:
@@ -195,13 +189,13 @@ class TestFailureFiltering:
     def test_filter_failures_with_failures(self, tmp_path):
         """Test filtering CSV with failures."""
         input_file = tmp_path / "input.csv"
-        with open(input_file, 'w', newline='') as f:
+        with open(input_file, "w", newline="") as f:
             writer = csv.writer(f)
-            writer.writerow(['bus_id', 'ETH ID', 'test_status'])
-            writer.writerow(['01:00.0', 'ETH00', 'ETH_ACTIVE'])
-            writer.writerow(['01:00.0', 'ETH01', 'TRAINING_FAIL'])
-            writer.writerow(['01:00.0', 'ETH02', 'LINK_DOWN'])
-            writer.writerow(['01:00.0', 'ETH05', 'ETH_UNCONNECTED'])
+            writer.writerow(["bus_id", "ETH ID", "test_status"])
+            writer.writerow(["01:00.0", "ETH00", "ETH_ACTIVE"])
+            writer.writerow(["01:00.0", "ETH01", "TRAINING_FAIL"])
+            writer.writerow(["01:00.0", "ETH02", "LINK_DOWN"])
+            writer.writerow(["01:00.0", "ETH05", "ETH_UNCONNECTED"])
 
         output_file = tmp_path / "output.csv"
         result = filter_failures(input_file, output_file)
@@ -214,18 +208,18 @@ class TestFailureFiltering:
         # Verify output content
         output_df = pd.read_csv(output_file)
         assert len(output_df) == 2
-        assert 'TRAINING_FAIL' in output_df['test_status'].values
-        assert 'LINK_DOWN' in output_df['test_status'].values
+        assert "TRAINING_FAIL" in output_df["test_status"].values
+        assert "LINK_DOWN" in output_df["test_status"].values
 
     def test_filter_failures_no_failures(self, tmp_path):
         """Test filtering CSV with no failures."""
         input_file = tmp_path / "input.csv"
-        with open(input_file, 'w', newline='') as f:
+        with open(input_file, "w", newline="") as f:
             writer = csv.writer(f)
-            writer.writerow(['bus_id', 'ETH ID', 'test_status'])
-            writer.writerow(['01:00.0', 'ETH00', 'ETH_ACTIVE'])
-            writer.writerow(['01:00.0', 'ETH01', 'ETH_ACTIVE'])
-            writer.writerow(['01:00.0', 'ETH05', 'ETH_UNCONNECTED'])
+            writer.writerow(["bus_id", "ETH ID", "test_status"])
+            writer.writerow(["01:00.0", "ETH00", "ETH_ACTIVE"])
+            writer.writerow(["01:00.0", "ETH01", "ETH_ACTIVE"])
+            writer.writerow(["01:00.0", "ETH05", "ETH_UNCONNECTED"])
 
         output_file = tmp_path / "output.csv"
         result = filter_failures(input_file, output_file)
@@ -237,29 +231,29 @@ class TestFailureFiltering:
     def test_filter_failures_missing_column(self, tmp_path):
         """Test filtering with missing status column."""
         input_file = tmp_path / "input.csv"
-        with open(input_file, 'w', newline='') as f:
+        with open(input_file, "w", newline="") as f:
             writer = csv.writer(f)
-            writer.writerow(['bus_id', 'ETH ID'])
-            writer.writerow(['01:00.0', 'ETH00'])
+            writer.writerow(["bus_id", "ETH ID"])
+            writer.writerow(["01:00.0", "ETH00"])
 
         output_file = tmp_path / "output.csv"
 
         with pytest.raises(DataProcessingError) as exc_info:
-            filter_failures(input_file, output_file, status_column='test_status')
+            filter_failures(input_file, output_file, status_column="test_status")
 
         assert "test_status" in str(exc_info.value)
 
     def test_filter_failures_custom_status_column(self, tmp_path):
         """Test filtering with custom status column."""
         input_file = tmp_path / "input.csv"
-        with open(input_file, 'w', newline='') as f:
+        with open(input_file, "w", newline="") as f:
             writer = csv.writer(f)
-            writer.writerow(['bus_id', 'ETH ID', 'custom_status'])
-            writer.writerow(['01:00.0', 'ETH00', 'ETH_ACTIVE'])
-            writer.writerow(['01:00.0', 'ETH01', 'FAIL'])
+            writer.writerow(["bus_id", "ETH ID", "custom_status"])
+            writer.writerow(["01:00.0", "ETH00", "ETH_ACTIVE"])
+            writer.writerow(["01:00.0", "ETH01", "FAIL"])
 
         output_file = tmp_path / "output.csv"
-        result = filter_failures(input_file, output_file, status_column='custom_status')
+        result = filter_failures(input_file, output_file, status_column="custom_status")
 
         assert result.success
         # With custom column, filtering logic still applies
@@ -268,10 +262,10 @@ class TestFailureFiltering:
     def test_filter_failures_default_output_path(self, tmp_path):
         """Test filtering with default output path."""
         input_file = tmp_path / "input.csv"
-        with open(input_file, 'w', newline='') as f:
+        with open(input_file, "w", newline="") as f:
             writer = csv.writer(f)
-            writer.writerow(['bus_id', 'ETH ID', 'test_status'])
-            writer.writerow(['01:00.0', 'ETH00', 'TRAINING_FAIL'])
+            writer.writerow(["bus_id", "ETH ID", "test_status"])
+            writer.writerow(["01:00.0", "ETH00", "TRAINING_FAIL"])
 
         # Don't specify output file
         result = filter_failures(input_file)
@@ -286,9 +280,9 @@ class TestFailureFiltering:
     def test_filter_failures_empty_input(self, tmp_path):
         """Test filtering empty CSV."""
         input_file = tmp_path / "empty.csv"
-        with open(input_file, 'w', newline='') as f:
+        with open(input_file, "w", newline="") as f:
             writer = csv.writer(f)
-            writer.writerow(['bus_id', 'ETH ID', 'test_status'])
+            writer.writerow(["bus_id", "ETH ID", "test_status"])
             # No data rows
 
         output_file = tmp_path / "output.csv"
@@ -311,9 +305,9 @@ class TestFilterResultModel:
             output_file=Path("output.csv"),
             total_rows=100,
             failure_count=10,
-            status_breakdown={'TRAINING_FAIL': 5, 'LINK_DOWN': 5},
+            status_breakdown={"TRAINING_FAIL": 5, "LINK_DOWN": 5},
             success=True,
-            error_message=None
+            error_message=None,
         )
 
         assert result.success
@@ -328,22 +322,22 @@ class TestEdgeCases:
     def test_read_csv_with_bom(self, tmp_path):
         """Test reading CSV with BOM (Byte Order Mark)."""
         csv_file = tmp_path / "bom.csv"
-        with open(csv_file, 'w', encoding='utf-8-sig') as f:
+        with open(csv_file, "w", encoding="utf-8-sig") as f:
             f.write("bus_id,test_status\n")
             f.write("01:00.0,ETH_ACTIVE\n")
 
         df = read_csv_with_validation(csv_file)
         assert df is not None
-        assert 'bus_id' in df.columns
+        assert "bus_id" in df.columns
 
     def test_filter_with_special_characters(self, tmp_path):
         """Test filtering with special characters in data."""
         input_file = tmp_path / "special.csv"
-        with open(input_file, 'w', newline='') as f:
+        with open(input_file, "w", newline="") as f:
             writer = csv.writer(f)
-            writer.writerow(['bus_id', 'ETH ID', 'test_status'])
-            writer.writerow(['"01:00.0"', 'ETH00', 'ETH_ACTIVE'])  # Quoted
-            writer.writerow(['02:00.0', 'ETH01', 'FAIL'])
+            writer.writerow(["bus_id", "ETH ID", "test_status"])
+            writer.writerow(['"01:00.0"', "ETH00", "ETH_ACTIVE"])  # Quoted
+            writer.writerow(["02:00.0", "ETH01", "FAIL"])
 
         output_file = tmp_path / "output.csv"
         result = filter_failures(input_file, output_file)
@@ -353,12 +347,12 @@ class TestEdgeCases:
     def test_filter_with_very_long_lines(self, tmp_path):
         """Test filtering with very long lines."""
         input_file = tmp_path / "long.csv"
-        long_value = 'A' * 10000  # Very long string
+        long_value = "A" * 10000  # Very long string
 
-        with open(input_file, 'w', newline='') as f:
+        with open(input_file, "w", newline="") as f:
             writer = csv.writer(f)
-            writer.writerow(['bus_id', 'ETH ID', 'test_status', 'data'])
-            writer.writerow(['01:00.0', 'ETH00', 'TRAINING_FAIL', long_value])
+            writer.writerow(["bus_id", "ETH ID", "test_status", "data"])
+            writer.writerow(["01:00.0", "ETH00", "TRAINING_FAIL", long_value])
 
         output_file = tmp_path / "output.csv"
         result = filter_failures(input_file, output_file)

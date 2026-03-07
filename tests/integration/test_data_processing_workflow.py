@@ -20,7 +20,7 @@ class TestDataProcessingWorkflow:
         df = read_csv_with_validation(sample_test_data_csv)
         assert df is not None
         assert len(df) > 0
-        assert 'test_status' in df.columns
+        assert "test_status" in df.columns
 
         # Step 2: Filter failures
         output_file = tmp_path / "failures.csv"
@@ -34,18 +34,18 @@ class TestDataProcessingWorkflow:
             failures_df = pd.read_csv(output_file)
             assert len(failures_df) == result.failure_count
             # All rows should be failures
-            assert not failures_df['test_status'].isin(['ETH_ACTIVE', 'ETH_UNCONNECTED']).any()
+            assert not failures_df["test_status"].isin(["ETH_ACTIVE", "ETH_UNCONNECTED"]).any()
 
     def test_filter_with_no_failures(self, tmp_path):
         """Test filtering CSV with no failures."""
         # Create CSV with only ETH_ACTIVE statuses
         csv_file = tmp_path / "no_failures.csv"
-        with open(csv_file, 'w', newline='') as f:
+        with open(csv_file, "w", newline="") as f:
             writer = csv.writer(f)
-            writer.writerow(['bus_id', 'ETH ID', 'test_status', 'test_type'])
-            writer.writerow(['01:00.0', 'ETH00', 'ETH_ACTIVE', 'SIMPLE_PACKET'])
-            writer.writerow(['01:00.0', 'ETH01', 'ETH_ACTIVE', 'SIMPLE_PACKET'])
-            writer.writerow(['01:00.0', 'ETH05', 'ETH_UNCONNECTED', 'SIMPLE_PACKET'])
+            writer.writerow(["bus_id", "ETH ID", "test_status", "test_type"])
+            writer.writerow(["01:00.0", "ETH00", "ETH_ACTIVE", "SIMPLE_PACKET"])
+            writer.writerow(["01:00.0", "ETH01", "ETH_ACTIVE", "SIMPLE_PACKET"])
+            writer.writerow(["01:00.0", "ETH05", "ETH_UNCONNECTED", "SIMPLE_PACKET"])
 
         output_file = tmp_path / "failures.csv"
         result = filter_failures(csv_file, output_file)
@@ -58,15 +58,15 @@ class TestDataProcessingWorkflow:
         """Test filtering with invalid CSV."""
         # Create CSV without required columns
         csv_file = tmp_path / "invalid.csv"
-        with open(csv_file, 'w', newline='') as f:
+        with open(csv_file, "w", newline="") as f:
             writer = csv.writer(f)
-            writer.writerow(['col1', 'col2'])
-            writer.writerow(['val1', 'val2'])
+            writer.writerow(["col1", "col2"])
+            writer.writerow(["val1", "val2"])
 
         output_file = tmp_path / "failures.csv"
 
         with pytest.raises(DataProcessingError) as exc_info:
-            filter_failures(csv_file, output_file, status_column='test_status')
+            filter_failures(csv_file, output_file, status_column="test_status")
 
         assert "test_status" in str(exc_info.value).lower()
 
@@ -74,15 +74,15 @@ class TestDataProcessingWorkflow:
         """Test filtering with custom status column."""
         # Create CSV with custom status column
         csv_file = tmp_path / "custom_status.csv"
-        with open(csv_file, 'w', newline='') as f:
+        with open(csv_file, "w", newline="") as f:
             writer = csv.writer(f)
-            writer.writerow(['bus_id', 'ETH ID', 'status', 'test_type'])
-            writer.writerow(['01:00.0', 'ETH00', 'PASS', 'SIMPLE_PACKET'])
-            writer.writerow(['01:00.0', 'ETH01', 'FAIL', 'SIMPLE_PACKET'])
-            writer.writerow(['01:00.0', 'ETH02', 'PASS', 'SIMPLE_PACKET'])
+            writer.writerow(["bus_id", "ETH ID", "status", "test_type"])
+            writer.writerow(["01:00.0", "ETH00", "PASS", "SIMPLE_PACKET"])
+            writer.writerow(["01:00.0", "ETH01", "FAIL", "SIMPLE_PACKET"])
+            writer.writerow(["01:00.0", "ETH02", "PASS", "SIMPLE_PACKET"])
 
         output_file = tmp_path / "failures.csv"
-        result = filter_failures(csv_file, output_file, status_column='status')
+        result = filter_failures(csv_file, output_file, status_column="status")
 
         # With custom filtering, need to specify what constitutes a failure
         # The default filter looks for ETH_ACTIVE/ETH_UNCONNECTED

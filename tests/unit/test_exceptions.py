@@ -104,9 +104,7 @@ class TestJiraErrors:
 
     def test_jira_connection_error_with_url(self):
         """Test JiraConnectionError with server URL."""
-        error = JiraConnectionError(
-            "Connection failed", server_url="https://example.atlassian.net"
-        )
+        error = JiraConnectionError("Connection failed", server_url="https://example.atlassian.net")
         error_str = str(error)
         assert "Connection failed" in error_str
         assert "https://example.atlassian.net" in error_str

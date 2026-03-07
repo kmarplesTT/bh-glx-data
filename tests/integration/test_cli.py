@@ -154,7 +154,9 @@ class TestBackwardsCompatibility:
                     sys.path.pop(0)
 
                 # Check that at least one warning is a DeprecationWarning
-                deprecation_warnings = [item for item in w if issubclass(item.category, DeprecationWarning)]
+                deprecation_warnings = [
+                    item for item in w if issubclass(item.category, DeprecationWarning)
+                ]
                 assert len(deprecation_warnings) > 0, "Expected deprecation warning"
                 assert "DEPRECATION WARNING" in str(deprecation_warnings[0].message)
 

@@ -199,7 +199,9 @@ class TestFailureRecord:
         assert record.diagnostic_data == {}
         assert record.connected_port is None
 
-    def test_with_all_fields(self, sample_failure_result, sample_failure_signature, sample_port_metadata):
+    def test_with_all_fields(
+        self, sample_failure_result, sample_failure_signature, sample_port_metadata
+    ):
         """Test creating FailureRecord with all fields."""
         diagnostic = {"cdr_unlock_cnt": 5, "retry_cnt": 10}
         record = FailureRecord(

@@ -355,7 +355,7 @@ class TestFindCSVAttachments:
     def test_find_csv_attachments_no_attachment_field(self):
         """Test finding CSV when attachment field doesn't exist."""
         mock_issue = MagicMock(spec=[])  # No fields attribute
-        delattr(mock_issue, 'fields')
+        delattr(mock_issue, "fields")
 
         # Should handle gracefully
         try:

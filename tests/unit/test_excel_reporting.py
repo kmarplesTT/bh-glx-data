@@ -65,10 +65,10 @@ class TestIdentifyTestType:
     def test_identify_prbs_from_column(self, tmp_path):
         """Test identifying PRBS from test_type column."""
         csv_file = tmp_path / "test.csv"
-        with open(csv_file, 'w', newline='') as f:
+        with open(csv_file, "w", newline="") as f:
             writer = csv.writer(f)
-            writer.writerow(['test_type', 'bus_id'])
-            writer.writerow(['TestType.SERDES_PRBS', '01:00.0'])
+            writer.writerow(["test_type", "bus_id"])
+            writer.writerow(["TestType.SERDES_PRBS", "01:00.0"])
 
         test_type = identify_test_type(csv_file)
         assert test_type == "PRBS"
@@ -76,10 +76,10 @@ class TestIdentifyTestType:
     def test_identify_data_from_column(self, tmp_path):
         """Test identifying DATA from test_type column."""
         csv_file = tmp_path / "test.csv"
-        with open(csv_file, 'w', newline='') as f:
+        with open(csv_file, "w", newline="") as f:
             writer = csv.writer(f)
-            writer.writerow(['test_type', 'bus_id'])
-            writer.writerow(['TestType.SIMPLE_PACKET', '01:00.0'])
+            writer.writerow(["test_type", "bus_id"])
+            writer.writerow(["TestType.SIMPLE_PACKET", "01:00.0"])
 
         test_type = identify_test_type(csv_file)
         assert test_type == "DATA"
@@ -87,10 +87,10 @@ class TestIdentifyTestType:
     def test_identify_from_filename_prbs(self, tmp_path):
         """Test identifying PRBS from filename."""
         csv_file = tmp_path / "prbs_test_results.csv"
-        with open(csv_file, 'w', newline='') as f:
+        with open(csv_file, "w", newline="") as f:
             writer = csv.writer(f)
-            writer.writerow(['bus_id'])
-            writer.writerow(['01:00.0'])
+            writer.writerow(["bus_id"])
+            writer.writerow(["01:00.0"])
 
         test_type = identify_test_type(csv_file)
         assert test_type == "PRBS"
@@ -98,10 +98,10 @@ class TestIdentifyTestType:
     def test_identify_from_filename_data(self, tmp_path):
         """Test identifying DATA from filename."""
         csv_file = tmp_path / "data_test_results.csv"
-        with open(csv_file, 'w', newline='') as f:
+        with open(csv_file, "w", newline="") as f:
             writer = csv.writer(f)
-            writer.writerow(['bus_id'])
-            writer.writerow(['01:00.0'])
+            writer.writerow(["bus_id"])
+            writer.writerow(["01:00.0"])
 
         test_type = identify_test_type(csv_file)
         assert test_type == "DATA"
@@ -109,10 +109,10 @@ class TestIdentifyTestType:
     def test_identify_unknown(self, tmp_path):
         """Test identifying unknown test type."""
         csv_file = tmp_path / "test.csv"
-        with open(csv_file, 'w', newline='') as f:
+        with open(csv_file, "w", newline="") as f:
             writer = csv.writer(f)
-            writer.writerow(['bus_id'])
-            writer.writerow(['01:00.0'])
+            writer.writerow(["bus_id"])
+            writer.writerow(["01:00.0"])
 
         test_type = identify_test_type(csv_file)
         assert test_type is None
@@ -124,10 +124,10 @@ class TestExtractSystemHostname:
     def test_extract_hostname_success(self, tmp_path):
         """Test successful hostname extraction."""
         csv_file = tmp_path / "test.csv"
-        with open(csv_file, 'w', newline='') as f:
+        with open(csv_file, "w", newline="") as f:
             writer = csv.writer(f)
-            writer.writerow(['host', 'bus_id'])
-            writer.writerow(['bh-glx-b02u02', '01:00.0'])
+            writer.writerow(["host", "bus_id"])
+            writer.writerow(["bh-glx-b02u02", "01:00.0"])
 
         hostname = extract_system_hostname(csv_file)
         assert hostname == "bh-glx-b02u02"
@@ -135,10 +135,10 @@ class TestExtractSystemHostname:
     def test_extract_hostname_no_host_column(self, tmp_path):
         """Test extracting hostname when host column missing."""
         csv_file = tmp_path / "test.csv"
-        with open(csv_file, 'w', newline='') as f:
+        with open(csv_file, "w", newline="") as f:
             writer = csv.writer(f)
-            writer.writerow(['bus_id'])
-            writer.writerow(['01:00.0'])
+            writer.writerow(["bus_id"])
+            writer.writerow(["01:00.0"])
 
         hostname = extract_system_hostname(csv_file)
         assert hostname is None
@@ -146,10 +146,10 @@ class TestExtractSystemHostname:
     def test_extract_hostname_empty(self, tmp_path):
         """Test extracting hostname when empty."""
         csv_file = tmp_path / "test.csv"
-        with open(csv_file, 'w', newline='') as f:
+        with open(csv_file, "w", newline="") as f:
             writer = csv.writer(f)
-            writer.writerow(['host', 'bus_id'])
-            writer.writerow(['', '01:00.0'])
+            writer.writerow(["host", "bus_id"])
+            writer.writerow(["", "01:00.0"])
 
         hostname = extract_system_hostname(csv_file)
         assert hostname is None
@@ -157,10 +157,10 @@ class TestExtractSystemHostname:
     def test_extract_hostname_with_spaces(self, tmp_path):
         """Test extracting hostname with spaces."""
         csv_file = tmp_path / "test.csv"
-        with open(csv_file, 'w', newline='') as f:
+        with open(csv_file, "w", newline="") as f:
             writer = csv.writer(f)
-            writer.writerow(['host', 'bus_id'])
-            writer.writerow(['  bh-glx-b02u02  ', '01:00.0'])
+            writer.writerow(["host", "bus_id"])
+            writer.writerow(["  bh-glx-b02u02  ", "01:00.0"])
 
         hostname = extract_system_hostname(csv_file)
         assert hostname == "bh-glx-b02u02"
@@ -202,50 +202,50 @@ class TestGroupCSVsBySystem:
         """Test grouping CSV files by system and firmware."""
         # Create test CSV files
         csv1 = tmp_path / "test_erisc_v1_7_103.csv"
-        with open(csv1, 'w', newline='') as f:
+        with open(csv1, "w", newline="") as f:
             writer = csv.writer(f)
-            writer.writerow(['host', 'test_type', 'bus_id'])
-            writer.writerow(['bh-glx-b02u02', 'TestType.SERDES_PRBS', '01:00.0'])
+            writer.writerow(["host", "test_type", "bus_id"])
+            writer.writerow(["bh-glx-b02u02", "TestType.SERDES_PRBS", "01:00.0"])
 
         csv2 = tmp_path / "test_erisc_v1_7_103_data.csv"
-        with open(csv2, 'w', newline='') as f:
+        with open(csv2, "w", newline="") as f:
             writer = csv.writer(f)
-            writer.writerow(['host', 'test_type', 'bus_id'])
-            writer.writerow(['bh-glx-b02u02', 'TestType.SIMPLE_PACKET', '01:00.0'])
+            writer.writerow(["host", "test_type", "bus_id"])
+            writer.writerow(["bh-glx-b02u02", "TestType.SIMPLE_PACKET", "01:00.0"])
 
         csv3 = tmp_path / "test_erisc_v2_0_0.csv"
-        with open(csv3, 'w', newline='') as f:
+        with open(csv3, "w", newline="") as f:
             writer = csv.writer(f)
-            writer.writerow(['host', 'test_type', 'bus_id'])
-            writer.writerow(['bh-glx-b03u02', 'TestType.SERDES_PRBS', '01:00.0'])
+            writer.writerow(["host", "test_type", "bus_id"])
+            writer.writerow(["bh-glx-b03u02", "TestType.SERDES_PRBS", "01:00.0"])
 
         csv_files = [csv1, csv2, csv3]
         grouped = group_csvs_by_system(csv_files)
 
         assert len(grouped) == 2
-        assert ('bh-glx-b02u02', 'erisc_v1_7_103') in grouped
-        assert ('bh-glx-b03u02', 'erisc_v2_0_0') in grouped
+        assert ("bh-glx-b02u02", "erisc_v1_7_103") in grouped
+        assert ("bh-glx-b03u02", "erisc_v2_0_0") in grouped
 
         # Check that files are grouped correctly
-        assert len(grouped[('bh-glx-b02u02', 'erisc_v1_7_103')]['PRBS']) == 1
-        assert len(grouped[('bh-glx-b02u02', 'erisc_v1_7_103')]['DATA']) == 1
-        assert len(grouped[('bh-glx-b03u02', 'erisc_v2_0_0')]['PRBS']) == 1
+        assert len(grouped[("bh-glx-b02u02", "erisc_v1_7_103")]["PRBS"]) == 1
+        assert len(grouped[("bh-glx-b02u02", "erisc_v1_7_103")]["DATA"]) == 1
+        assert len(grouped[("bh-glx-b03u02", "erisc_v2_0_0")]["PRBS"]) == 1
 
     def test_group_csvs_skips_invalid(self, tmp_path):
         """Test grouping skips files without hostname or test type."""
         # CSV without hostname
         csv1 = tmp_path / "test1.csv"
-        with open(csv1, 'w', newline='') as f:
+        with open(csv1, "w", newline="") as f:
             writer = csv.writer(f)
-            writer.writerow(['test_type', 'bus_id'])
-            writer.writerow(['TestType.SERDES_PRBS', '01:00.0'])
+            writer.writerow(["test_type", "bus_id"])
+            writer.writerow(["TestType.SERDES_PRBS", "01:00.0"])
 
         # CSV without test type
         csv2 = tmp_path / "test2.csv"
-        with open(csv2, 'w', newline='') as f:
+        with open(csv2, "w", newline="") as f:
             writer = csv.writer(f)
-            writer.writerow(['host', 'bus_id'])
-            writer.writerow(['bh-glx-b02u02', '01:00.0'])
+            writer.writerow(["host", "bus_id"])
+            writer.writerow(["bh-glx-b02u02", "01:00.0"])
 
         csv_files = [csv1, csv2]
         grouped = group_csvs_by_system(csv_files)
@@ -259,23 +259,23 @@ class TestCompileTestData:
     def test_compile_test_data_success(self, tmp_path):
         """Test compiling data from multiple CSV files."""
         csv1 = tmp_path / "test1.csv"
-        with open(csv1, 'w', newline='') as f:
+        with open(csv1, "w", newline="") as f:
             writer = csv.writer(f)
-            writer.writerow(['bus_id', 'test_status'])
-            writer.writerow(['01:00.0', 'ETH_ACTIVE'])
+            writer.writerow(["bus_id", "test_status"])
+            writer.writerow(["01:00.0", "ETH_ACTIVE"])
 
         csv2 = tmp_path / "test2.csv"
-        with open(csv2, 'w', newline='') as f:
+        with open(csv2, "w", newline="") as f:
             writer = csv.writer(f)
-            writer.writerow(['bus_id', 'test_status'])
-            writer.writerow(['02:00.0', 'ETH_ACTIVE'])
+            writer.writerow(["bus_id", "test_status"])
+            writer.writerow(["02:00.0", "ETH_ACTIVE"])
 
         csv_files = [csv1, csv2]
         df = compile_test_data(csv_files, "PRBS")
 
         assert df is not None
         assert len(df) == 2
-        assert 'bus_id' in df.columns
+        assert "bus_id" in df.columns
 
     def test_compile_test_data_empty_list(self, tmp_path):
         """Test compiling with empty file list."""
@@ -285,16 +285,16 @@ class TestCompileTestData:
     def test_compile_test_data_skip_empty_files(self, tmp_path):
         """Test that empty CSV files are skipped."""
         csv1 = tmp_path / "test1.csv"
-        with open(csv1, 'w', newline='') as f:
+        with open(csv1, "w", newline="") as f:
             writer = csv.writer(f)
-            writer.writerow(['bus_id', 'test_status'])
+            writer.writerow(["bus_id", "test_status"])
             # No data rows
 
         csv2 = tmp_path / "test2.csv"
-        with open(csv2, 'w', newline='') as f:
+        with open(csv2, "w", newline="") as f:
             writer = csv.writer(f)
-            writer.writerow(['bus_id', 'test_status'])
-            writer.writerow(['02:00.0', 'ETH_ACTIVE'])
+            writer.writerow(["bus_id", "test_status"])
+            writer.writerow(["02:00.0", "ETH_ACTIVE"])
 
         csv_files = [csv1, csv2]
         df = compile_test_data(csv_files, "PRBS")
@@ -310,7 +310,7 @@ class TestLoadTemplate:
         """Test successful template loading."""
         template_path = tmp_path / "template.xlsx"
 
-        with patch('openpyxl.load_workbook') as mock_load:
+        with patch("openpyxl.load_workbook") as mock_load:
             mock_workbook = MagicMock()
             mock_load.return_value = mock_workbook
 
@@ -336,7 +336,7 @@ class TestLoadTemplate:
         template_path = tmp_path / "template.xlsx"
         template_path.touch()
 
-        with patch('openpyxl.load_workbook') as mock_load:
+        with patch("openpyxl.load_workbook") as mock_load:
             mock_load.side_effect = Exception("Load error")
 
             with pytest.raises(TemplateError) as exc_info:
@@ -354,32 +354,29 @@ class TestPasteDataToSheet:
         mock_sheet = MagicMock()
         mock_sheet.max_row = 0
         mock_workbook.__getitem__.return_value = mock_sheet
-        mock_workbook.sheetnames = ['test_sheet']
+        mock_workbook.sheetnames = ["test_sheet"]
 
-        df = pd.DataFrame({
-            'col1': [1, 2, 3],
-            'col2': ['a', 'b', 'c']
-        })
+        df = pd.DataFrame({"col1": [1, 2, 3], "col2": ["a", "b", "c"]})
 
         last_row, last_col = paste_data_to_sheet(
             mock_workbook,
-            'test_sheet',
+            "test_sheet",
             df,
         )
 
         assert last_row == 4  # 3 data rows + 1 header
         assert last_col == 2
-        mock_workbook.__getitem__.assert_called_with('test_sheet')
+        mock_workbook.__getitem__.assert_called_with("test_sheet")
 
     def test_paste_data_to_sheet_not_found(self):
         """Test pasting to nonexistent sheet."""
         mock_workbook = MagicMock()
-        mock_workbook.sheetnames = ['other_sheet']
+        mock_workbook.sheetnames = ["other_sheet"]
 
-        df = pd.DataFrame({'col1': [1, 2, 3]})
+        df = pd.DataFrame({"col1": [1, 2, 3]})
 
         with pytest.raises(ExcelGenerationError) as exc_info:
-            paste_data_to_sheet(mock_workbook, 'test_sheet', df)
+            paste_data_to_sheet(mock_workbook, "test_sheet", df)
 
         assert "not found" in str(exc_info.value)
 
@@ -389,11 +386,11 @@ class TestPasteDataToSheet:
         mock_sheet = MagicMock()
         mock_sheet.max_row = 100  # Existing data
         mock_workbook.__getitem__.return_value = mock_sheet
-        mock_workbook.sheetnames = ['test_sheet']
+        mock_workbook.sheetnames = ["test_sheet"]
 
-        df = pd.DataFrame({'col1': [1, 2]})
+        df = pd.DataFrame({"col1": [1, 2]})
 
-        paste_data_to_sheet(mock_workbook, 'test_sheet', df)
+        paste_data_to_sheet(mock_workbook, "test_sheet", df)
 
         # Should delete existing rows
         mock_sheet.delete_rows.assert_called_once_with(1, 100)
@@ -406,7 +403,7 @@ class TestUpdatePivotTableSource:
         """Test successful pivot table source update."""
         mock_workbook = MagicMock()
         mock_sheet = MagicMock()
-        mock_workbook.sheetnames = ['pivot_sheet']
+        mock_workbook.sheetnames = ["pivot_sheet"]
         mock_workbook.__getitem__.return_value = mock_sheet
 
         # Mock pivot table structure
@@ -424,26 +421,26 @@ class TestUpdatePivotTableSource:
 
         result = update_pivot_table_source(
             mock_workbook,
-            'pivot_sheet',
-            'data_sheet',
-            'A1:Z100',
+            "pivot_sheet",
+            "data_sheet",
+            "A1:Z100",
         )
 
         assert result is True
-        assert mock_ws_source.ref == 'A1:Z100'
-        assert mock_ws_source.sheet == 'data_sheet'
+        assert mock_ws_source.ref == "A1:Z100"
+        assert mock_ws_source.sheet == "data_sheet"
         assert mock_cache.refreshOnLoad is True
 
     def test_update_pivot_table_source_no_sheet(self):
         """Test updating nonexistent sheet."""
         mock_workbook = MagicMock()
-        mock_workbook.sheetnames = ['other_sheet']
+        mock_workbook.sheetnames = ["other_sheet"]
 
         result = update_pivot_table_source(
             mock_workbook,
-            'pivot_sheet',
-            'data_sheet',
-            'A1:Z100',
+            "pivot_sheet",
+            "data_sheet",
+            "A1:Z100",
         )
 
         assert result is False
@@ -452,15 +449,15 @@ class TestUpdatePivotTableSource:
         """Test updating sheet without pivot tables."""
         mock_workbook = MagicMock()
         mock_sheet = MagicMock()
-        mock_workbook.sheetnames = ['pivot_sheet']
+        mock_workbook.sheetnames = ["pivot_sheet"]
         mock_workbook.__getitem__.return_value = mock_sheet
         mock_sheet._pivots = []
 
         result = update_pivot_table_source(
             mock_workbook,
-            'pivot_sheet',
-            'data_sheet',
-            'A1:Z100',
+            "pivot_sheet",
+            "data_sheet",
+            "A1:Z100",
         )
 
         assert result is False
@@ -473,7 +470,7 @@ class TestRefreshPivotTables:
         """Test successful pivot table refresh."""
         mock_workbook = MagicMock()
         mock_sheet = MagicMock()
-        mock_workbook.sheetnames = ['pivot_sheet']
+        mock_workbook.sheetnames = ["pivot_sheet"]
         mock_workbook.__getitem__.return_value = mock_sheet
 
         mock_pivot = MagicMock()
@@ -483,7 +480,7 @@ class TestRefreshPivotTables:
 
         mock_sheet._pivots = [mock_pivot]
 
-        result = refresh_pivot_tables(mock_workbook, 'pivot_sheet')
+        result = refresh_pivot_tables(mock_workbook, "pivot_sheet")
 
         assert result is True
         assert mock_cache.refreshOnLoad is True
@@ -491,9 +488,9 @@ class TestRefreshPivotTables:
     def test_refresh_pivot_tables_no_sheet(self):
         """Test refreshing nonexistent sheet."""
         mock_workbook = MagicMock()
-        mock_workbook.sheetnames = ['other_sheet']
+        mock_workbook.sheetnames = ["other_sheet"]
 
-        result = refresh_pivot_tables(mock_workbook, 'pivot_sheet')
+        result = refresh_pivot_tables(mock_workbook, "pivot_sheet")
 
         assert result is False
 
@@ -501,11 +498,11 @@ class TestRefreshPivotTables:
         """Test refreshing sheet without pivot tables."""
         mock_workbook = MagicMock()
         mock_sheet = MagicMock()
-        mock_workbook.sheetnames = ['pivot_sheet']
+        mock_workbook.sheetnames = ["pivot_sheet"]
         mock_workbook.__getitem__.return_value = mock_sheet
         mock_sheet._pivots = []
 
-        result = refresh_pivot_tables(mock_workbook, 'pivot_sheet')
+        result = refresh_pivot_tables(mock_workbook, "pivot_sheet")
 
         assert result is True  # Not an error, just no pivots
 
@@ -537,11 +534,11 @@ class TestSaveWorkbook:
 class TestGenerateExcelSummary:
     """Test Excel summary generation."""
 
-    @patch('bh_glx_data.excel_reporting.generator.load_template')
-    @patch('bh_glx_data.excel_reporting.generator.paste_data_to_sheet')
-    @patch('bh_glx_data.excel_reporting.generator.update_pivot_table_source')
-    @patch('bh_glx_data.excel_reporting.generator.refresh_pivot_tables')
-    @patch('bh_glx_data.excel_reporting.generator.save_workbook')
+    @patch("bh_glx_data.excel_reporting.generator.load_template")
+    @patch("bh_glx_data.excel_reporting.generator.paste_data_to_sheet")
+    @patch("bh_glx_data.excel_reporting.generator.update_pivot_table_source")
+    @patch("bh_glx_data.excel_reporting.generator.refresh_pivot_tables")
+    @patch("bh_glx_data.excel_reporting.generator.save_workbook")
     def test_generate_excel_summary_success(
         self,
         mock_save,
@@ -553,12 +550,12 @@ class TestGenerateExcelSummary:
     ):
         """Test successful Excel summary generation."""
         mock_workbook = MagicMock()
-        mock_workbook.sheetnames = ['raw prbs data', 'raw data', 'PRBS Summary', 'DATA Summary']
+        mock_workbook.sheetnames = ["raw prbs data", "raw data", "PRBS Summary", "DATA Summary"]
         mock_load.return_value = mock_workbook
         mock_paste.return_value = (100, 10)
 
-        prbs_df = pd.DataFrame({'col1': [1, 2, 3]})
-        data_df = pd.DataFrame({'col1': [4, 5, 6]})
+        prbs_df = pd.DataFrame({"col1": [1, 2, 3]})
+        data_df = pd.DataFrame({"col1": [4, 5, 6]})
 
         template_path = tmp_path / "template.xlsx"
         template_path.touch()
@@ -588,16 +585,16 @@ class TestProcessAllSystems:
         data_dir.mkdir()
 
         csv1 = data_dir / "test_erisc_v1_7_103.csv"
-        with open(csv1, 'w', newline='') as f:
+        with open(csv1, "w", newline="") as f:
             writer = csv.writer(f)
-            writer.writerow(['host', 'test_type', 'bus_id'])
-            writer.writerow(['bh-glx-b02u02', 'TestType.SERDES_PRBS', '01:00.0'])
+            writer.writerow(["host", "test_type", "bus_id"])
+            writer.writerow(["bh-glx-b02u02", "TestType.SERDES_PRBS", "01:00.0"])
 
         template_path = tmp_path / "template.xlsx"
         template_path.touch()
         output_dir = tmp_path / "output"
 
-        with patch('bh_glx_data.excel_reporting.generator.generate_excel_summary') as mock_gen:
+        with patch("bh_glx_data.excel_reporting.generator.generate_excel_summary") as mock_gen:
             mock_gen.return_value = output_dir / "test.xlsx"
 
             result = process_all_systems(
@@ -606,8 +603,8 @@ class TestProcessAllSystems:
                 output_dir,
             )
 
-            assert result['success_count'] > 0
-            assert len(result['generated_files']) > 0
+            assert result["success_count"] > 0
+            assert len(result["generated_files"]) > 0
 
     def test_process_all_systems_no_csv_files(self, tmp_path):
         """Test processing with no CSV files."""
@@ -629,30 +626,30 @@ class TestProcessAllSystems:
 
         # Create test CSV for multiple systems
         csv1 = data_dir / "test1_erisc_v1_7_103.csv"
-        with open(csv1, 'w', newline='') as f:
+        with open(csv1, "w", newline="") as f:
             writer = csv.writer(f)
-            writer.writerow(['host', 'test_type', 'bus_id'])
-            writer.writerow(['bh-glx-b02u02', 'TestType.SERDES_PRBS', '01:00.0'])
+            writer.writerow(["host", "test_type", "bus_id"])
+            writer.writerow(["bh-glx-b02u02", "TestType.SERDES_PRBS", "01:00.0"])
 
         csv2 = data_dir / "test2_erisc_v1_7_103.csv"
-        with open(csv2, 'w', newline='') as f:
+        with open(csv2, "w", newline="") as f:
             writer = csv.writer(f)
-            writer.writerow(['host', 'test_type', 'bus_id'])
-            writer.writerow(['bh-glx-b03u02', 'TestType.SERDES_PRBS', '01:00.0'])
+            writer.writerow(["host", "test_type", "bus_id"])
+            writer.writerow(["bh-glx-b03u02", "TestType.SERDES_PRBS", "01:00.0"])
 
         template_path = tmp_path / "template.xlsx"
         template_path.touch()
         output_dir = tmp_path / "output"
 
-        with patch('bh_glx_data.excel_reporting.generator.generate_excel_summary') as mock_gen:
+        with patch("bh_glx_data.excel_reporting.generator.generate_excel_summary") as mock_gen:
             mock_gen.return_value = output_dir / "test.xlsx"
 
             result = process_all_systems(
                 data_dir,
                 template_path,
                 output_dir,
-                system_filter=['bh-glx-b02u02'],
+                system_filter=["bh-glx-b02u02"],
             )
 
             # Should only process one system
-            assert result['total_combinations'] == 1
+            assert result["total_combinations"] == 1
