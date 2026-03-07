@@ -51,7 +51,7 @@ bh-glx-data/
 │       ├── platform_topology.py  # Topology data
 │       └── cli.py
 ├── tests/                        # Comprehensive test suite
-│   ├── unit/                     # Unit tests (~85% coverage)
+│   ├── unit/                     # Unit tests
 │   └── integration/              # Integration tests
 ├── templates/                    # Excel templates
 ├── docs/                         # Documentation
@@ -82,9 +82,6 @@ After installation, all CLI commands are available in your PATH.
 ```bash
 # Run all tests
 pytest tests/
-
-# Run with coverage
-pytest tests/ --cov=bh_glx_data --cov-report=term-missing
 
 # Run specific test file
 pytest tests/unit/test_hardware.py
@@ -161,7 +158,7 @@ bh-topology 01:00.0 ETH07 --json
 - **Type Safety**: Dataclasses for data models, type hints throughout
 - **Multi-Source Configuration**: CLI args → env vars → user config → local config → defaults
 - **Comprehensive Error Handling**: Custom exception hierarchy
-- **Testability**: >80% test coverage target, >85% for library code
+- **Testability**: Comprehensive test suite with unit and integration tests
 
 ### Module Responsibilities
 
@@ -359,9 +356,8 @@ Fallback: If `test_type` column is missing, uses filename patterns (`prbs_test`,
 
 ### Code Quality
 
-- **Testing**: >80% overall coverage target, >85% for library code
+- **Testing**: Comprehensive test suite
   - Run tests: `pytest tests/`
-  - Run with coverage: `pytest tests/ --cov=bh_glx_data --cov-report=term-missing`
   - Integration tests in `tests/integration/`
   - Unit tests in `tests/unit/`
 - **Type Hints**: All public APIs should have type hints

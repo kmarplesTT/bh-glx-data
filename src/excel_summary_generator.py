@@ -5,37 +5,36 @@ Processes CSV files from the data/ directory, groups them by system hostname and
 separates PRBS and Data test types, and generates Excel summary files using the
 system_data_template.xlsx template.
 """
-import sys
-import re
+
 import argparse
 import logging
-from pathlib import Path
+import re
+import sys
 from collections import defaultdict
-import pandas as pd
+from pathlib import Path
+
 import openpyxl
+import pandas as pd
 from openpyxl.utils import get_column_letter
 
 # Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 # Constants
-DATA_DIR = Path('csv_data')
-TEMPLATE_PATH = Path('templates/system_data_template.xlsx')
-OUTPUT_DIR = Path('summaries')
+DATA_DIR = Path("csv_data")
+TEMPLATE_PATH = Path("templates/system_data_template.xlsx")
+OUTPUT_DIR = Path("summaries")
 
 # Test type constants
-TEST_TYPE_PRBS = 'TestType.SERDES_PRBS'
-TEST_TYPE_DATA = 'TestType.SIMPLE_PACKET'
+TEST_TYPE_PRBS = "TestType.SERDES_PRBS"
+TEST_TYPE_DATA = "TestType.SIMPLE_PACKET"
 
 # Sheet names in template
-SHEET_RAW_PRBS = 'raw prbs data'
-SHEET_RAW_DATA = 'raw data'
-SHEET_PRBS_SUMMARY = 'PRBS Summary'
-SHEET_DATA_SUMMARY = 'DATA Summary'
+SHEET_RAW_PRBS = "raw prbs data"
+SHEET_RAW_DATA = "raw data"
+SHEET_PRBS_SUMMARY = "PRBS Summary"
+SHEET_DATA_SUMMARY = "DATA Summary"
 
 
 def scan_csv_files():
@@ -49,7 +48,7 @@ def scan_csv_files():
         logger.error(f"Data directory {DATA_DIR} does not exist")
         return []
 
-    csv_files = list(DATA_DIR.glob('*.csv'))
+    csv_files = list(DATA_DIR.glob("*.csv"))
     logger.info(f"Found {len(csv_files)} CSV files in {DATA_DIR}")
     return csv_files
 
@@ -70,19 +69,19 @@ def extract_firmware_version(csv_path):
     filename = csv_path.name
 
     # Try to match erisc_vX_Y_Z pattern first
-    pattern1 = r'erisc_v\d+_\d+_\d+'
+    pattern1 = r"erisc_v\d+_\d+_\d+"
     match = re.search(pattern1, filename)
     if match:
         return match.group(0)
 
     # Try to match vX_Y_Z pattern
-    pattern2 = r'v\d+_\d+_\d+'
+    pattern2 = r"v\d+_\d+_\d+"
     match = re.search(pattern2, filename)
     if match:
         return match.group(0)
 
     logger.warning(f"Could not extract firmware version from filename: {filename}, using 'unknown'")
-    return 'unknown'
+    return "unknown"
 
 
 def identify_test_type(csv_path):
@@ -99,37 +98,37 @@ def identify_test_type(csv_path):
         # Read just the first row to check test_type
         df = pd.read_csv(csv_path, nrows=1)
 
-        if 'test_type' not in df.columns:
+        if "test_type" not in df.columns:
             logger.warning(f"CSV file {csv_path.name} does not have 'test_type' column")
             # Fallback to filename check
-            if 'prbs_test' in csv_path.name.lower():
-                return 'PRBS'
-            elif 'data_test' in csv_path.name.lower():
-                return 'DATA'
+            if "prbs_test" in csv_path.name.lower():
+                return "PRBS"
+            elif "data_test" in csv_path.name.lower():
+                return "DATA"
             return None
 
-        test_type_value = df['test_type'].iloc[0]
+        test_type_value = df["test_type"].iloc[0]
 
         if test_type_value == TEST_TYPE_PRBS:
-            return 'PRBS'
+            return "PRBS"
         elif test_type_value == TEST_TYPE_DATA:
-            return 'DATA'
+            return "DATA"
         else:
             logger.warning(f"Unknown test_type '{test_type_value}' in {csv_path.name}")
             # Fallback to filename check
-            if 'prbs_test' in csv_path.name.lower():
-                return 'PRBS'
-            elif 'data_test' in csv_path.name.lower():
-                return 'DATA'
+            if "prbs_test" in csv_path.name.lower():
+                return "PRBS"
+            elif "data_test" in csv_path.name.lower():
+                return "DATA"
             return None
 
     except Exception as e:
         logger.error(f"Error reading CSV file {csv_path.name}: {e}")
         # Fallback to filename check
-        if 'prbs_test' in csv_path.name.lower():
-            return 'PRBS'
-        elif 'data_test' in csv_path.name.lower():
-            return 'DATA'
+        if "prbs_test" in csv_path.name.lower():
+            return "PRBS"
+        elif "data_test" in csv_path.name.lower():
+            return "DATA"
         return None
 
 
@@ -147,12 +146,12 @@ def extract_system_hostname(csv_path):
         # Read just the first row to get hostname
         df = pd.read_csv(csv_path, nrows=1)
 
-        if 'host' not in df.columns:
+        if "host" not in df.columns:
             logger.warning(f"CSV file {csv_path.name} does not have 'host' column")
             return None
 
-        hostname = df['host'].iloc[0]
-        if pd.isna(hostname) or hostname == '':
+        hostname = df["host"].iloc[0]
+        if pd.isna(hostname) or hostname == "":
             logger.warning(f"Empty hostname in {csv_path.name}")
             return None
 
@@ -173,7 +172,7 @@ def group_csvs_by_system_and_firmware(csv_files):
     Returns:
         dict: Dictionary with keys (hostname, firmware_version) and values as lists of CSV paths
     """
-    grouped = defaultdict(lambda: {'PRBS': [], 'DATA': []})
+    grouped = defaultdict(lambda: {"PRBS": [], "DATA": []})
 
     for csv_path in csv_files:
         hostname = extract_system_hostname(csv_path)
@@ -190,7 +189,9 @@ def group_csvs_by_system_and_firmware(csv_files):
 
         key = (hostname, firmware_version)
         grouped[key][test_type].append(csv_path)
-        logger.debug(f"Grouped {csv_path.name}: hostname={hostname}, firmware={firmware_version}, type={test_type}")
+        logger.debug(
+            f"Grouped {csv_path.name}: hostname={hostname}, firmware={firmware_version}, type={test_type}"
+        )
 
     return grouped
 
@@ -230,7 +231,9 @@ def compile_test_data(csv_files, test_type):
 
     # Concatenate all dataframes
     combined_df = pd.concat(dataframes, ignore_index=True)
-    logger.info(f"Compiled {len(combined_df)} total rows for {test_type} test type from {len(dataframes)} files")
+    logger.info(
+        f"Compiled {len(combined_df)} total rows for {test_type} test type from {len(dataframes)} files"
+    )
 
     return combined_df
 
@@ -284,7 +287,7 @@ def paste_data_to_sheet(workbook, sheet_name, data_df):
         headers = list(data_df.columns)
         for col_idx, header in enumerate(headers, start=1):
             cell = sheet.cell(row=1, column=col_idx)
-            cell.value = str(header) if header is not None else ''
+            cell.value = str(header) if header is not None else ""
 
         # Write data rows
         for row_idx, (_, row_data) in enumerate(data_df.iterrows(), start=2):
@@ -305,12 +308,15 @@ def paste_data_to_sheet(workbook, sheet_name, data_df):
         last_row = len(data_df) + 1  # +1 for header row
         last_col = len(headers)
 
-        logger.info(f"Pasted {len(data_df)} rows to sheet '{sheet_name}' (range: A1:{get_column_letter(last_col)}{last_row})")
+        logger.info(
+            f"Pasted {len(data_df)} rows to sheet '{sheet_name}' (range: A1:{get_column_letter(last_col)}{last_row})"
+        )
         return last_row, last_col
 
     except Exception as e:
         logger.error(f"Error pasting data to sheet '{sheet_name}': {e}")
         import traceback
+
         logger.error(traceback.format_exc())
         return None, None
 
@@ -337,7 +343,7 @@ def update_pivot_table_source(workbook, pivot_sheet_name, data_sheet_name, data_
 
         # Access pivot tables through the sheet
         # In openpyxl, pivot tables are accessed via sheet._pivots (private attribute)
-        if not hasattr(sheet, '_pivots') or not sheet._pivots:
+        if not hasattr(sheet, "_pivots") or not sheet._pivots:
             logger.warning(f"No pivot tables found in sheet '{pivot_sheet_name}'")
             return False
 
@@ -347,9 +353,9 @@ def update_pivot_table_source(workbook, pivot_sheet_name, data_sheet_name, data_
             try:
                 # Access the cache
                 cache = pivot_table.cache
-                if cache and hasattr(cache, 'cacheSource'):
+                if cache and hasattr(cache, "cacheSource"):
                     source = cache.cacheSource
-                    if hasattr(source, 'worksheetSource'):
+                    if hasattr(source, "worksheetSource"):
                         ws_source = source.worksheetSource
                         # Update the range and sheet name
                         ws_source.ref = data_range
@@ -357,17 +363,19 @@ def update_pivot_table_source(workbook, pivot_sheet_name, data_sheet_name, data_
 
                         # Refresh the pivot table cache
                         # Mark the cache as needing refresh by updating its refreshOnLoad flag
-                        if hasattr(cache, 'refreshOnLoad'):
+                        if hasattr(cache, "refreshOnLoad"):
                             cache.refreshOnLoad = True
                         # Also try to invalidate the cache
-                        if hasattr(cache, 'refresh'):
+                        if hasattr(cache, "refresh"):
                             try:
                                 cache.refresh()
                             except (AttributeError, TypeError):
                                 pass  # Some cache objects may not have refresh method
 
                         updated_count += 1
-                        logger.info(f"Updated and refreshed pivot table data source to '{data_sheet_name}'!{data_range}")
+                        logger.info(
+                            f"Updated and refreshed pivot table data source to '{data_sheet_name}'!{data_range}"
+                        )
             except Exception as e:
                 logger.warning(f"Could not update one pivot table: {e}")
                 continue
@@ -401,7 +409,7 @@ def refresh_pivot_tables(workbook, sheet_name):
     try:
         sheet = workbook[sheet_name]
 
-        if not hasattr(sheet, '_pivots') or not sheet._pivots:
+        if not hasattr(sheet, "_pivots") or not sheet._pivots:
             logger.debug(f"No pivot tables found in sheet '{sheet_name}'")
             return True  # Not an error, just no pivot tables
 
@@ -411,7 +419,7 @@ def refresh_pivot_tables(workbook, sheet_name):
                 cache = pivot_table.cache
                 if cache:
                     # Set refreshOnLoad flag so Excel will refresh when opened
-                    if hasattr(cache, 'refreshOnLoad'):
+                    if hasattr(cache, "refreshOnLoad"):
                         cache.refreshOnLoad = True
                     refreshed_count += 1
             except Exception as e:
@@ -419,7 +427,9 @@ def refresh_pivot_tables(workbook, sheet_name):
                 continue
 
         if refreshed_count > 0:
-            logger.info(f"Marked {refreshed_count} pivot table(s) for refresh in sheet '{sheet_name}'")
+            logger.info(
+                f"Marked {refreshed_count} pivot table(s) for refresh in sheet '{sheet_name}'"
+            )
 
         return True
 
@@ -465,7 +475,9 @@ def generate_excel_summary(hostname, firmware_version, prbs_data, data_test_data
                 # Refresh pivot table
                 refresh_pivot_tables(workbook, SHEET_PRBS_SUMMARY)
             else:
-                logger.warning(f"Sheet '{SHEET_PRBS_SUMMARY}' not found, skipping pivot table update")
+                logger.warning(
+                    f"Sheet '{SHEET_PRBS_SUMMARY}' not found, skipping pivot table update"
+                )
         else:
             logger.warning(f"Failed to paste PRBS data for {hostname} {firmware_version}")
     else:
@@ -483,7 +495,9 @@ def generate_excel_summary(hostname, firmware_version, prbs_data, data_test_data
                 # Refresh pivot table
                 refresh_pivot_tables(workbook, SHEET_DATA_SUMMARY)
             else:
-                logger.warning(f"Sheet '{SHEET_DATA_SUMMARY}' not found, skipping pivot table update")
+                logger.warning(
+                    f"Sheet '{SHEET_DATA_SUMMARY}' not found, skipping pivot table update"
+                )
         else:
             logger.warning(f"Failed to paste Data test data for {hostname} {firmware_version}")
     else:
@@ -507,19 +521,19 @@ def parse_arguments():
         argparse.Namespace: Parsed arguments
     """
     parser = argparse.ArgumentParser(
-        description='Generate Excel summaries from CSV test data',
+        description="Generate Excel summaries from CSV test data",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
   %(prog)s                          # Process all systems
   %(prog)s --systems bh-glx-b02u02   # Process a single system
   %(prog)s --systems bh-glx-b02u02 bh-glx-b03u02  # Process multiple systems
-        """
+        """,
     )
     parser.add_argument(
-        '--systems',
-        nargs='*',
-        help='System hostname(s) to process (e.g., bh-glx-b02u02). If not provided, processes all systems'
+        "--systems",
+        nargs="*",
+        help="System hostname(s) to process (e.g., bh-glx-b02u02). If not provided, processes all systems",
     )
     return parser.parse_args()
 
@@ -530,16 +544,16 @@ def main():
     """
     # Deprecation warning
     import warnings
+
     warnings.warn(
         "\n" + "=" * 80 + "\n"
         "DEPRECATION WARNING: Direct script execution is deprecated.\n"
         "Please use the new command: 'bh-generate-excel'\n"
         "Example: bh-generate-excel --data-dir csv_data/\n"
         "See documentation for migration guide: docs/migration_guide.md\n"
-        "This script will be removed in version 1.0.0\n"
-        + "=" * 80,
+        "This script will be removed in version 1.0.0\n" + "=" * 80,
         DeprecationWarning,
-        stacklevel=2
+        stacklevel=2,
     )
 
     # Parse command-line arguments
@@ -580,7 +594,9 @@ def main():
             logger.warning(f"Warning: No data found for systems: {', '.join(missing_systems)}")
 
         grouped = filtered_grouped
-        logger.info(f"Filtering to {len(grouped)} system+firmware combinations for specified systems")
+        logger.info(
+            f"Filtering to {len(grouped)} system+firmware combinations for specified systems"
+        )
     else:
         logger.info(f"Processing all {len(grouped)} unique system+firmware combinations")
 
@@ -593,13 +609,13 @@ def main():
 
         # Compile PRBS data
         prbs_data = None
-        if file_groups['PRBS']:
-            prbs_data = compile_test_data(file_groups['PRBS'], 'PRBS')
+        if file_groups["PRBS"]:
+            prbs_data = compile_test_data(file_groups["PRBS"], "PRBS")
 
         # Compile Data test data
         data_test_data = None
-        if file_groups['DATA']:
-            data_test_data = compile_test_data(file_groups['DATA'], 'DATA')
+        if file_groups["DATA"]:
+            data_test_data = compile_test_data(file_groups["DATA"], "DATA")
 
         # Generate Excel file
         if prbs_data is None and data_test_data is None:
@@ -613,14 +629,14 @@ def main():
             error_count += 1
 
     # Print summary
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("SUMMARY")
-    print("="*60)
+    print("=" * 60)
     print(f"System+firmware combinations processed: {len(grouped)}")
     print(f"Successfully generated: {success_count}")
     print(f"Errors: {error_count}")
     print(f"Output directory: {OUTPUT_DIR.absolute()}")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

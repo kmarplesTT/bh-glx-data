@@ -15,7 +15,7 @@ Each chip has 14 ETH ports (ETH00-ETH13):
   See CABLE_CONNECTOR_PORTS_BY_CHIP and PLATFORM_TOPOLOGY for details
 """
 
-from typing import Dict, Tuple, Optional, Set
+from typing import Dict, Optional, Set, Tuple
 
 # Type aliases for clarity
 BusId = str  # Format: "XY:00.0"
@@ -164,7 +164,6 @@ PLATFORM_TOPOLOGY: Dict[Connection, Connection] = {
     ("48:00.0", "ETH06"): ("08:00.0", "ETH06"),
     ("48:00.0", "ETH07"): ("88:00.0", "ETH07"),
     ("48:00.0", "ETH09"): ("88:00.0", "ETH09"),
-
     # UBB3 - U1 (c1:00.0)
     ("c1:00.0", "ETH04"): ("c2:00.0", "ETH02"),
     ("c1:00.0", "ETH06"): ("c2:00.0", "ETH03"),
@@ -225,7 +224,6 @@ PLATFORM_TOPOLOGY: Dict[Connection, Connection] = {
     ("c8:00.0", "ETH06"): ("88:00.0", "ETH06"),
     ("c8:00.0", "ETH07"): ("08:00.0", "ETH07"),
     ("c8:00.0", "ETH09"): ("08:00.0", "ETH09"),
-
     # UBB4 - U1 (81:00.0)
     ("81:00.0", "ETH04"): ("82:00.0", "ETH02"),
     ("81:00.0", "ETH06"): ("82:00.0", "ETH03"),
@@ -361,7 +359,7 @@ def get_ubb_from_bus_id(bus_id: str) -> int:
         UBB number (1-4)
     """
     ubb_digit = bus_id[0].lower()
-    ubb_map = {'0': 1, '4': 2, 'c': 3, '8': 4}
+    ubb_map = {"0": 1, "4": 2, "c": 3, "8": 4}
     return ubb_map.get(ubb_digit, 0)
 
 
@@ -426,7 +424,7 @@ def normalize_bus_id(bus_id: str) -> str:
         Normalized bus ID string
     """
     bus_id = bus_id.lower().strip()
-    if ':' not in bus_id:
+    if ":" not in bus_id:
         # Assume format like "01" and add ":00.0"
         bus_id = f"{bus_id}:00.0"
     return bus_id
@@ -436,16 +434,16 @@ def normalize_bus_id(bus_id: str) -> str:
 if __name__ == "__main__":
     # Deprecation warning
     import warnings
+
     warnings.warn(
         "\n" + "=" * 80 + "\n"
         "DEPRECATION WARNING: Direct script execution is deprecated.\n"
         "Please use the new command: 'bh-topology'\n"
         "Example: bh-topology 01:00.0 ETH07\n"
         "See documentation for migration guide: docs/migration_guide.md\n"
-        "This script will be removed in version 1.0.0\n"
-        + "=" * 80,
+        "This script will be removed in version 1.0.0\n" + "=" * 80,
         DeprecationWarning,
-        stacklevel=2
+        stacklevel=2,
     )
 
     import argparse
@@ -480,32 +478,22 @@ ETH Port Categories:
     * U2-U4: ETH02,03,04,06,07,09 (platform), ETH00,01,10,11 (cable)
     * U5: ETH00,01,04,06,07,09 (platform), ETH02,03,10,11 (cable)
     * U6-U8: ETH00,01,02,03,04,06,07,09 (platform), ETH10,11 (cable)
-        """
+        """,
     )
 
+    parser.add_argument("bus_id", help="Bus ID of the source device (e.g., '01:00.0' or '01')")
     parser.add_argument(
-        "bus_id",
-        help="Bus ID of the source device (e.g., '01:00.0' or '01')"
+        "eth_port", nargs="?", help="ETH port to query (e.g., 'ETH07' or '7'). Omit to use --all"
     )
     parser.add_argument(
-        "eth_port",
-        nargs="?",
-        help="ETH port to query (e.g., 'ETH07' or '7'). Omit to use --all"
+        "--all", "-a", action="store_true", help="Show all connections for the device"
     )
+    parser.add_argument("--json", "-j", action="store_true", help="Output in JSON format")
     parser.add_argument(
-        "--all", "-a",
+        "--bidirectional",
+        "-b",
         action="store_true",
-        help="Show all connections for the device"
-    )
-    parser.add_argument(
-        "--json", "-j",
-        action="store_true",
-        help="Output in JSON format"
-    )
-    parser.add_argument(
-        "--bidirectional", "-b",
-        action="store_true",
-        help="Also show reverse connection (what connects to the result)"
+        help="Also show reverse connection (what connects to the result)",
     )
 
     args = parser.parse_args()
@@ -532,9 +520,13 @@ ETH Port Categories:
                 "bus_id": bus_id,
                 "device": format_device_info(bus_id),
                 "connections": {
-                    port: {"bus_id": dest_bus, "eth_port": dest_port, "device": format_device_info(dest_bus)}
+                    port: {
+                        "bus_id": dest_bus,
+                        "eth_port": dest_port,
+                        "device": format_device_info(dest_bus),
+                    }
                     for port, (dest_bus, dest_port) in connections.items()
-                }
+                },
             }
             print(json.dumps(output, indent=2))
         else:
@@ -557,18 +549,33 @@ ETH Port Categories:
             port_status = get_port_status(bus_id, eth_port)
 
             if port_status == "invalid":
-                print(f"Error: Invalid ETH port '{eth_port}'. Valid ports are ETH00-ETH13.", file=sys.stderr)
+                print(
+                    f"Error: Invalid ETH port '{eth_port}'. Valid ports are ETH00-ETH13.",
+                    file=sys.stderr,
+                )
             elif port_status == "unused":
-                print(f"No connection for {bus_id} {eth_port}: Port is unused (not physically present).", file=sys.stderr)
+                print(
+                    f"No connection for {bus_id} {eth_port}: Port is unused (not physically present).",
+                    file=sys.stderr,
+                )
                 print("  Note: ETH05 and ETH08 are not present on the hardware.", file=sys.stderr)
             elif port_status == "unconnected":
-                print(f"No connection for {bus_id} {eth_port}: Port is unconnected (not used).", file=sys.stderr)
+                print(
+                    f"No connection for {bus_id} {eth_port}: Port is unconnected (not used).",
+                    file=sys.stderr,
+                )
                 print("  Note: ETH12 and ETH13 are not connected on the platform.", file=sys.stderr)
             elif port_status == "cable_connector":
                 chip_num = get_chip_from_bus_id(bus_id)
                 cable_ports = sorted(CABLE_CONNECTOR_PORTS_BY_CHIP.get(chip_num, set()))
-                print(f"No connection for {bus_id} {eth_port}: Port is connected to external cable connector.", file=sys.stderr)
-                print(f"  Note: Chip U{chip_num} cable connector ports: {', '.join(cable_ports)}", file=sys.stderr)
+                print(
+                    f"No connection for {bus_id} {eth_port}: Port is connected to external cable connector.",
+                    file=sys.stderr,
+                )
+                print(
+                    f"  Note: Chip U{chip_num} cable connector ports: {', '.join(cable_ports)}",
+                    file=sys.stderr,
+                )
             else:
                 # Should be in topology but isn't - this is unexpected
                 print(f"Error: No connection found for {bus_id} {eth_port}", file=sys.stderr)
@@ -583,13 +590,13 @@ ETH Port Categories:
                 "source": {
                     "bus_id": bus_id,
                     "eth_port": eth_port,
-                    "device": format_device_info(bus_id)
+                    "device": format_device_info(bus_id),
                 },
                 "destination": {
                     "bus_id": dest_bus,
                     "eth_port": dest_port,
-                    "device": format_device_info(dest_bus)
-                }
+                    "device": format_device_info(dest_bus),
+                },
             }
 
             if args.bidirectional:
@@ -599,18 +606,22 @@ ETH Port Categories:
                     output["reverse"] = {
                         "bus_id": reverse[0],
                         "eth_port": reverse[1],
-                        "device": format_device_info(reverse[0])
+                        "device": format_device_info(reverse[0]),
                     }
 
             print(json.dumps(output, indent=2))
         else:
-            print(f"{format_device_info(bus_id)} ({bus_id}) {eth_port} -> {format_device_info(dest_bus)} ({dest_bus}) {dest_port}")
+            print(
+                f"{format_device_info(bus_id)} ({bus_id}) {eth_port} -> {format_device_info(dest_bus)} ({dest_bus}) {dest_port}"
+            )
 
             if args.bidirectional:
                 reverse = get_connected_port(dest_bus, dest_port)
                 if reverse:
                     rev_bus, rev_port = reverse
-                    print(f"Reverse: {format_device_info(dest_bus)} ({dest_bus}) {dest_port} -> {format_device_info(rev_bus)} ({rev_bus}) {rev_port}")
+                    print(
+                        f"Reverse: {format_device_info(dest_bus)} ({dest_bus}) {dest_port} -> {format_device_info(rev_bus)} ({rev_bus}) {rev_port}"
+                    )
 
     else:
         parser.print_help()

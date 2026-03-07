@@ -15,10 +15,7 @@ from pathlib import Path
 import pandas as pd
 
 # Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s"
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 
@@ -47,13 +44,13 @@ def filter_failures(input_file: Path, output_file: Path = None) -> None:
         logger.info(f"Total rows read: {len(df)}")
 
         # Check if test_status column exists
-        if 'test_status' not in df.columns:
+        if "test_status" not in df.columns:
             logger.error("Column 'test_status' not found in CSV file")
             logger.info(f"Available columns: {', '.join(df.columns)}")
             sys.exit(1)
 
         # Filter for failures: test_status NOT in [ETH_ACTIVE, ETH_UNCONNECTED]
-        failures_df = df[~df['test_status'].isin(['ETH_ACTIVE', 'ETH_UNCONNECTED'])]
+        failures_df = df[~df["test_status"].isin(["ETH_ACTIVE", "ETH_UNCONNECTED"])]
 
         logger.info(f"Failures found: {len(failures_df)}")
 
@@ -68,7 +65,7 @@ def filter_failures(input_file: Path, output_file: Path = None) -> None:
         # Show summary of failure types
         if len(failures_df) > 0:
             logger.info("\nFailure breakdown by test_status:")
-            status_counts = failures_df['test_status'].value_counts()
+            status_counts = failures_df["test_status"].value_counts()
             for status, count in status_counts.items():
                 logger.info(f"  {status}: {count}")
 
@@ -80,16 +77,16 @@ def filter_failures(input_file: Path, output_file: Path = None) -> None:
 def main():
     # Deprecation warning
     import warnings
+
     warnings.warn(
         "\n" + "=" * 80 + "\n"
         "DEPRECATION WARNING: Direct script execution is deprecated.\n"
         "Please use the new command: 'bh-filter-failures'\n"
         "Example: bh-filter-failures data_test_results.csv\n"
         "See documentation for migration guide: docs/migration_guide.md\n"
-        "This script will be removed in version 1.0.0\n"
-        + "=" * 80,
+        "This script will be removed in version 1.0.0\n" + "=" * 80,
         DeprecationWarning,
-        stacklevel=2
+        stacklevel=2,
     )
 
     parser = argparse.ArgumentParser(
@@ -105,19 +102,13 @@ Examples:
 
   # Use the provided test file
   python3 filter_failures.py ~/work/syseng/src/t6ifc/t6py/data_test_results.csv
-        """
+        """,
     )
 
-    parser.add_argument(
-        'input_file',
-        type=Path,
-        help="Path to input CSV file containing test data"
-    )
+    parser.add_argument("input_file", type=Path, help="Path to input CSV file containing test data")
 
     parser.add_argument(
-        '-o', '--output',
-        type=Path,
-        help="Path to output CSV file (default: <input>_failures.csv)"
+        "-o", "--output", type=Path, help="Path to output CSV file (default: <input>_failures.csv)"
     )
 
     args = parser.parse_args()

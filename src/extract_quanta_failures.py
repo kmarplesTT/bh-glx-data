@@ -16,10 +16,10 @@ File Organization:
         - prbs_test_*.csv
 """
 
+import shutil
 import sys
 import tarfile
 import tempfile
-import shutil
 from pathlib import Path
 
 
@@ -44,7 +44,7 @@ def extract_csv_files(archive_path: Path, output_dir: Path, archive_basename: st
 
     # Use archive stem as basename if not provided
     if archive_basename is None:
-        archive_basename = archive_path.stem.replace('.tar', '')
+        archive_basename = archive_path.stem.replace(".tar", "")
 
     print(f"Processing {archive_path.name}...")
 
@@ -54,15 +54,20 @@ def extract_csv_files(archive_path: Path, output_dir: Path, archive_basename: st
 
         try:
             # Extract the UBB archive
-            with tarfile.open(archive_path, 'r:gz') as tar:
+            with tarfile.open(archive_path, "r:gz") as tar:
                 # Find tt_funtest_ubb_* directories containing ft_eth_stress_*.tar.gz or ft_burnin_*.tar.gz
-                funtest_members = [m for m in tar.getmembers()
-                                  if 'tt_funtest_ubb_' in m.name and
-                                  ('ft_eth_stress_' in m.name or 'ft_burnin_' in m.name) and
-                                  m.name.endswith('.tar.gz')]
+                funtest_members = [
+                    m
+                    for m in tar.getmembers()
+                    if "tt_funtest_ubb_" in m.name
+                    and ("ft_eth_stress_" in m.name or "ft_burnin_" in m.name)
+                    and m.name.endswith(".tar.gz")
+                ]
 
                 if not funtest_members:
-                    print(f"  Warning: No ft_eth_stress_*.tar.gz or ft_burnin_*.tar.gz found in archive")
+                    print(
+                        f"  Warning: No ft_eth_stress_*.tar.gz or ft_burnin_*.tar.gz found in archive"
+                    )
                     return 0
 
                 # Extract the test archives (ft_eth_stress or ft_burnin)
@@ -71,12 +76,20 @@ def extract_csv_files(archive_path: Path, output_dir: Path, archive_basename: st
                     test_archive = temp_path / member.name
 
                     # Extract CSV files from test archive
-                    with tarfile.open(test_archive, 'r:gz') as test_tar:
+                    with tarfile.open(test_archive, "r:gz") as test_tar:
                         # Look for CSV files in ft_eth_stress/ or ft_burnin/ directories
-                        csv_members = [m for m in test_tar.getmembers()
-                                      if (m.name.startswith('ft_eth_stress/') or m.name.startswith('ft_burnin/')) and
-                                      (('data_test_' in m.name and m.name.endswith('.csv')) or
-                                       ('prbs_test_' in m.name and m.name.endswith('.csv')))]
+                        csv_members = [
+                            m
+                            for m in test_tar.getmembers()
+                            if (
+                                m.name.startswith("ft_eth_stress/")
+                                or m.name.startswith("ft_burnin/")
+                            )
+                            and (
+                                ("data_test_" in m.name and m.name.endswith(".csv"))
+                                or ("prbs_test_" in m.name and m.name.endswith(".csv"))
+                            )
+                        ]
 
                         if not csv_members:
                             print(f"  Warning: No CSV files found in {member.name}")
@@ -109,22 +122,22 @@ def main():
     """Main entry point."""
     # Deprecation warning
     import warnings
+
     warnings.warn(
         "\n" + "=" * 80 + "\n"
         "DEPRECATION WARNING: Direct script execution is deprecated.\n"
         "Please use the new command: 'bh-extract-quanta'\n"
         "Example: bh-extract-quanta QC3_UBB_20260128.tar.gz\n"
         "See documentation for migration guide: docs/migration_guide.md\n"
-        "This script will be removed in version 1.0.0\n"
-        + "=" * 80,
+        "This script will be removed in version 1.0.0\n" + "=" * 80,
         DeprecationWarning,
-        stacklevel=2
+        stacklevel=2,
     )
 
     import argparse
 
     parser = argparse.ArgumentParser(
-        description='Extract test CSV files from Quanta QC2/QC3 test archives',
+        description="Extract test CSV files from Quanta QC2/QC3 test archives",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -141,27 +154,29 @@ The tool will:
   1. Open the test archive
   2. Find and extract ft_eth_stress_*.tar.gz or ft_burnin_*.tar.gz archives
   3. Extract data_test_*.csv and prbs_test_*.csv files to quanta/ directory
-"""
+""",
     )
 
     parser.add_argument(
-        'archive_file',
+        "archive_file",
         type=str,
-        help='Path to the QC2/QC3 test archive file (e.g., QC2-FRO-*.tar.gz)'
+        help="Path to the QC2/QC3 test archive file (e.g., QC2-FRO-*.tar.gz)",
     )
 
     parser.add_argument(
-        '-o', '--output-dir',
+        "-o",
+        "--output-dir",
         type=str,
-        default='quanta',
-        help='Output directory for extracted CSV files (default: quanta/)'
+        default="quanta",
+        help="Output directory for extracted CSV files (default: quanta/)",
     )
 
     parser.add_argument(
-        '-p', '--prefix',
+        "-p",
+        "--prefix",
         type=str,
         default=None,
-        help='Prefix for output filenames (default: archive basename)'
+        help="Prefix for output filenames (default: archive basename)",
     )
 
     args = parser.parse_args()
@@ -172,7 +187,7 @@ The tool will:
         print(f"Error: File not found: {archive_path}", file=sys.stderr)
         sys.exit(1)
 
-    if not archive_path.name.endswith('.tar.gz'):
+    if not archive_path.name.endswith(".tar.gz"):
         print(f"Error: Expected a .tar.gz file, got: {archive_path.name}", file=sys.stderr)
         sys.exit(1)
 

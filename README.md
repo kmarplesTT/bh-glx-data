@@ -407,9 +407,6 @@ pip install -e ".[dev]"
 # Run all tests
 pytest
 
-# Run with coverage
-pytest --cov=bh_glx_data --cov-report=term-missing
-
 # Run specific test file
 pytest tests/unit/test_hardware.py
 
@@ -554,7 +551,7 @@ MIT License - See LICENSE file for details
 - ✨ Comprehensive error handling
 - ✨ Data models with type safety
 - ✨ Multi-source configuration management
-- ✨ Test suite with >50% coverage
+- ✨ Comprehensive test suite
 - ⚠️ Backwards compatible with old scripts (deprecated)
 
 ---

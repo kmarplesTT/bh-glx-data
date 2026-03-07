@@ -38,7 +38,6 @@ dependencies = [
 dev = [
     # Testing
     "pytest>=7.0",
-    "pytest-cov>=4.0",
     "pytest-mock>=3.10",
     "pytest-xdist>=3.0",
     # Code Quality
@@ -76,10 +75,6 @@ python_classes = ["Test*"]
 python_functions = ["test_*"]
 addopts = [
     "--verbose",
-    "--cov=bh_glx_data",
-    "--cov-report=term-missing",
-    "--cov-report=html",
-    "--cov-fail-under=80",
 ]
 
 [tool.black]

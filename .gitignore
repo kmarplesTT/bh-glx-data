@@ -26,6 +26,11 @@ build/
 dist/
 *.egg-info/
 
+# Coverage files
+.coverage
+.coverage.*
+htmlcov/
+
 # IDE
 .vscode/
 .idea/
@@ -35,3 +40,5 @@ dist/
 # OS
 .DS_Store
 Thumbs.db
+
+.claude

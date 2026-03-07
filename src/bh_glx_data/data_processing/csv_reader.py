@@ -125,12 +125,12 @@ def extract_firmware_version(filename: str) -> Optional[str]:
         return None
 
     # Try to match erisc format first (erisc_v#_#_#)
-    erisc_match = re.search(r'erisc_v\d+_\d+_\d+', filename)
+    erisc_match = re.search(r"erisc_v\d+_\d+_\d+", filename)
     if erisc_match:
         return erisc_match.group(0)
 
     # Try to match v format (v#_#_# or v#_#_#_#)
-    v_match = re.search(r'v\d+_\d+_\d+(?:_\d+)?', filename)
+    v_match = re.search(r"v\d+_\d+_\d+(?:_\d+)?", filename)
     if v_match:
         return v_match.group(0)
 
