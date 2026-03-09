@@ -5,6 +5,7 @@ import pytest
 from bh_glx_data.hardware.platform_topology import (
     CABLE_CONNECTOR_PORTS_BY_CHIP,
     PLATFORM_TOPOLOGY,
+    QSFP_PORT_MAPPING,
     UNCONNECTED_PORTS,
     UNUSED_PORTS,
     format_device_info,
@@ -12,6 +13,7 @@ from bh_glx_data.hardware.platform_topology import (
     get_chip_from_bus_id,
     get_connected_port,
     get_port_status,
+    get_qsfp_port,
     get_ubb_from_bus_id,
     normalize_bus_id,
     normalize_eth_port,
@@ -298,6 +300,184 @@ class TestTopologyConsistency:
                 ) not in PLATFORM_TOPOLOGY, (
                     f"Unconnected port {bus_id} {port} should not be in topology"
                 )
+
+
+class TestQSFPPortMapping:
+    """Test QSFP port mapping functionality."""
+
+    def test_qsfp_mapping_data_structure(self):
+        """Test that QSFP mapping data structure is defined."""
+        assert isinstance(QSFP_PORT_MAPPING, dict)
+        assert len(QSFP_PORT_MAPPING) > 0
+        # Should have 28 entries (14 QSFP ports × 2 ETH ports each)
+        assert len(QSFP_PORT_MAPPING) == 28
+
+    def test_qsfp_mapping_all_14_ports(self):
+        """Test that all 14 QSFP ports are represented in mapping."""
+        qsfp_ports = set(QSFP_PORT_MAPPING.values())
+        assert len(qsfp_ports) == 14
+        assert qsfp_ports == set(range(1, 15))  # QSFP-1 through QSFP-14
+
+    def test_qsfp_mapping_each_port_has_two_eth(self):
+        """Test that each QSFP port maps to exactly 2 ETH ports."""
+        from collections import Counter
+
+        qsfp_counts = Counter(QSFP_PORT_MAPPING.values())
+        for qsfp_num in range(1, 15):
+            assert qsfp_counts[qsfp_num] == 2, f"QSFP-{qsfp_num} should map to exactly 2 ETH ports"
+
+    def test_get_qsfp_port_u1_eth10(self):
+        """Test QSFP-7 mapping for U1 ETH10."""
+        # From requirements: (U1 ETH10, U2 ETH10) -> QSFP-7
+        result = get_qsfp_port("01:00.0", "ETH10")
+        assert result == 7
+
+        # Test across different UBBs (U# is independent of UBB)
+        result = get_qsfp_port("41:00.0", "ETH10")  # UBB2/U1
+        assert result == 7
+
+        result = get_qsfp_port("c1:00.0", "ETH10")  # UBB3/U1
+        assert result == 7
+
+        result = get_qsfp_port("81:00.0", "ETH10")  # UBB4/U1
+        assert result == 7
+
+    def test_get_qsfp_port_u5_eth02(self):
+        """Test QSFP-1 mapping for U5 ETH02."""
+        # From requirements: (U5 ETH02, U5 ETH03) -> QSFP-1
+        result = get_qsfp_port("05:00.0", "ETH02")
+        assert result == 1
+
+        result = get_qsfp_port("05:00.0", "ETH03")
+        assert result == 1
+
+    def test_get_qsfp_port_u1_eth00_eth01(self):
+        """Test QSFP-3 mapping for U1 ETH00/ETH01."""
+        # From requirements: (U1 ETH00, U1 ETH01) -> QSFP-3
+        result = get_qsfp_port("01:00.0", "ETH00")
+        assert result == 3
+
+        result = get_qsfp_port("01:00.0", "ETH01")
+        assert result == 3
+
+    def test_get_qsfp_port_u3_eth10(self):
+        """Test QSFP-9 mapping for U3 ETH10."""
+        # From requirements: (U3 ETH10, U4 ETH10) -> QSFP-9
+        result = get_qsfp_port("03:00.0", "ETH10")
+        assert result == 9
+
+        result = get_qsfp_port("43:00.0", "ETH10")  # UBB2/U3
+        assert result == 9
+
+    def test_get_qsfp_port_u7_u8_eth11(self):
+        """Test QSFP-14 mapping for U7/U8 ETH11."""
+        # From requirements: (U7 ETH11, U8 ETH11) -> QSFP-14
+        result = get_qsfp_port("07:00.0", "ETH11")
+        assert result == 14
+
+        result = get_qsfp_port("08:00.0", "ETH11")
+        assert result == 14
+
+    def test_get_qsfp_port_platform_connected(self):
+        """Test that platform-connected ports return None."""
+        # ETH04 is platform-connected for U1, not a cable connector
+        result = get_qsfp_port("01:00.0", "ETH04")
+        assert result is None
+
+        result = get_qsfp_port("01:00.0", "ETH07")
+        assert result is None
+
+    def test_get_qsfp_port_unused(self):
+        """Test that unused ports return None."""
+        result = get_qsfp_port("01:00.0", "ETH05")
+        assert result is None
+
+        result = get_qsfp_port("01:00.0", "ETH08")
+        assert result is None
+
+    def test_get_qsfp_port_unconnected(self):
+        """Test that unconnected ports return None."""
+        result = get_qsfp_port("01:00.0", "ETH12")
+        assert result is None
+
+        result = get_qsfp_port("01:00.0", "ETH13")
+        assert result is None
+
+    def test_qsfp_mapping_consistency_with_cable_ports(self):
+        """Test that QSFP mapping is consistent with cable connector definitions."""
+        # All ports in QSFP_PORT_MAPPING should be cable connector ports
+        for (chip_num, eth_port), qsfp_num in QSFP_PORT_MAPPING.items():
+            assert (
+                chip_num in CABLE_CONNECTOR_PORTS_BY_CHIP
+            ), f"Chip U{chip_num} not in cable connector mapping"
+            assert (
+                eth_port in CABLE_CONNECTOR_PORTS_BY_CHIP[chip_num]
+            ), f"U{chip_num} {eth_port} is in QSFP mapping but not in cable connector ports"
+
+    def test_qsfp_mapping_covers_all_cable_ports(self):
+        """Test that all cable connector ports have QSFP mappings."""
+        # Every cable connector port should have a QSFP mapping
+        for chip_num, cable_ports in CABLE_CONNECTOR_PORTS_BY_CHIP.items():
+            for port in cable_ports:
+                assert (
+                    chip_num,
+                    port,
+                ) in QSFP_PORT_MAPPING, f"Cable port U{chip_num} {port} missing from QSFP mapping"
+
+    def test_all_qsfp_mappings_from_requirements(self):
+        """Test all 14 QSFP mappings from requirements document."""
+        # All mappings from qsfp_port_mapping_requirements.md
+        test_cases = [
+            # (bus_id, eth_port, expected_qsfp)
+            # QSFP-1: U5 ETH02, ETH03
+            ("05:00.0", "ETH02", 1),
+            ("05:00.0", "ETH03", 1),
+            # QSFP-2: U1 ETH02, ETH03
+            ("01:00.0", "ETH02", 2),
+            ("01:00.0", "ETH03", 2),
+            # QSFP-3: U1 ETH00, ETH01
+            ("01:00.0", "ETH00", 3),
+            ("01:00.0", "ETH01", 3),
+            # QSFP-4: U2 ETH00, ETH01
+            ("02:00.0", "ETH00", 4),
+            ("02:00.0", "ETH01", 4),
+            # QSFP-5: U3 ETH00, ETH01
+            ("03:00.0", "ETH00", 5),
+            ("03:00.0", "ETH01", 5),
+            # QSFP-6: U4 ETH00, ETH01
+            ("04:00.0", "ETH00", 6),
+            ("04:00.0", "ETH01", 6),
+            # QSFP-7: U1 ETH10, U2 ETH10
+            ("01:00.0", "ETH10", 7),
+            ("02:00.0", "ETH10", 7),
+            # QSFP-8: U5 ETH10, U6 ETH10
+            ("05:00.0", "ETH10", 8),
+            ("06:00.0", "ETH10", 8),
+            # QSFP-9: U3 ETH10, U4 ETH10
+            ("03:00.0", "ETH10", 9),
+            ("04:00.0", "ETH10", 9),
+            # QSFP-10: U7 ETH10, U8 ETH10
+            ("07:00.0", "ETH10", 10),
+            ("08:00.0", "ETH10", 10),
+            # QSFP-11: U1 ETH11, U2 ETH11
+            ("01:00.0", "ETH11", 11),
+            ("02:00.0", "ETH11", 11),
+            # QSFP-12: U5 ETH11, U6 ETH11
+            ("05:00.0", "ETH11", 12),
+            ("06:00.0", "ETH11", 12),
+            # QSFP-13: U3 ETH11, U4 ETH11
+            ("03:00.0", "ETH11", 13),
+            ("04:00.0", "ETH11", 13),
+            # QSFP-14: U7 ETH11, U8 ETH11
+            ("07:00.0", "ETH11", 14),
+            ("08:00.0", "ETH11", 14),
+        ]
+
+        for bus_id, eth_port, expected_qsfp in test_cases:
+            result = get_qsfp_port(bus_id, eth_port)
+            assert (
+                result == expected_qsfp
+            ), f"Expected {bus_id} {eth_port} -> QSFP-{expected_qsfp}, got {result}"
 
 
 class TestEdgeCases:

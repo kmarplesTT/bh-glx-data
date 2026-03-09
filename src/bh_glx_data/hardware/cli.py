@@ -14,6 +14,8 @@ from bh_glx_data.hardware.platform_topology import (
     get_chip_from_bus_id,
     get_connected_port,
     get_port_status,
+    get_qsfp_port,
+    get_ubb_from_bus_id,
     normalize_bus_id,
     normalize_eth_port,
 )
@@ -142,35 +144,64 @@ def main():
                     f"Error: Invalid ETH port '{eth_port}'. Valid ports are ETH00-ETH13.",
                     file=sys.stderr,
                 )
+                sys.exit(1)
             elif port_status == "unused":
                 print(
                     f"No connection for {bus_id} {eth_port}: Port is unused (not physically present).",
                     file=sys.stderr,
                 )
                 print("  Note: ETH05 and ETH08 are not present on the hardware.", file=sys.stderr)
+                sys.exit(1)
             elif port_status == "unconnected":
                 print(
                     f"No connection for {bus_id} {eth_port}: Port is unconnected (not used).",
                     file=sys.stderr,
                 )
                 print("  Note: ETH12 and ETH13 are not connected on the platform.", file=sys.stderr)
+                sys.exit(1)
             elif port_status == "cable_connector":
-                chip_num = get_chip_from_bus_id(bus_id)
-                cable_ports = sorted(CABLE_CONNECTOR_PORTS_BY_CHIP.get(chip_num, set()))
-                print(
-                    f"No connection for {bus_id} {eth_port}: Port is connected to external cable connector.",
-                    file=sys.stderr,
-                )
-                print(
-                    f"  Note: Chip U{chip_num} cable connector ports: {', '.join(cable_ports)}",
-                    file=sys.stderr,
-                )
+                # Check if this port has a QSFP mapping
+                qsfp_port = get_qsfp_port(bus_id, eth_port)
+                if qsfp_port:
+                    # Display QSFP connection
+                    ubb = get_ubb_from_bus_id(bus_id)
+                    if args.json:
+                        output = {
+                            "source": {
+                                "bus_id": bus_id,
+                                "eth_port": eth_port,
+                                "device": format_device_info(bus_id),
+                            },
+                            "destination": {
+                                "qsfp_port": qsfp_port,
+                                "ubb": ubb,
+                                "description": f"UBB{ubb} QSFP-{qsfp_port}",
+                            },
+                        }
+                        print(json.dumps(output, indent=2))
+                    else:
+                        print(
+                            f"{format_device_info(bus_id)} ({bus_id}) {eth_port} -> UBB{ubb} QSFP-{qsfp_port}"
+                        )
+                    sys.exit(0)
+                else:
+                    # Cable connector but no QSFP mapping (shouldn't happen)
+                    chip_num = get_chip_from_bus_id(bus_id)
+                    cable_ports = sorted(CABLE_CONNECTOR_PORTS_BY_CHIP.get(chip_num, set()))
+                    print(
+                        f"No connection for {bus_id} {eth_port}: Port is connected to external cable connector.",
+                        file=sys.stderr,
+                    )
+                    print(
+                        f"  Note: Chip U{chip_num} cable connector ports: {', '.join(cable_ports)}",
+                        file=sys.stderr,
+                    )
+                    sys.exit(1)
             else:
                 # Should be in topology but isn't - this is unexpected
                 print(f"Error: No connection found for {bus_id} {eth_port}", file=sys.stderr)
                 print("  This may indicate missing topology data.", file=sys.stderr)
-
-            sys.exit(1)
+                sys.exit(1)
 
         dest_bus, dest_port = connected
 

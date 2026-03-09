@@ -137,8 +137,11 @@ bh-extract-quanta --analyze QC3_S7TK_0128_build_test.xlsx
 ### Platform Topology Queries
 
 ```bash
-# Query specific connection
+# Query specific platform connection
 bh-topology 01:00.0 ETH07
+
+# Query QSFP port mapping (for cable connector ports)
+bh-topology 01:00.0 ETH10
 
 # Show all connections for device
 bh-topology 01:00.0 --all
@@ -286,15 +289,21 @@ Platform topology data and queries.
 
 - **`platform_topology.py`**: Topology mapping
   - `PLATFORM_TOPOLOGY`: Dictionary mapping (bus_id, eth_port) → (bus_id, eth_port)
+  - `QSFP_PORT_MAPPING`: Dictionary mapping (chip_num, eth_port) → QSFP port number (1-14)
   - Platform structure: 4 UBBs × 8 chips × 14 ETH ports
   - Port categories:
     - Unused: `ETH05`, `ETH08`
     - Unconnected: `ETH12`, `ETH13`
-    - Cable connector ports (varies by chip)
+    - Cable connector ports (varies by chip, mapped to QSFP ports)
     - Platform connected ports (internal chip-to-chip)
+  - QSFP mapping:
+    - 14 QSFP ports (QSFP-1 through QSFP-14)
+    - Each QSFP port represents 8 serdes lanes (2 ETH ports of 4 lanes each)
+    - Cable connector ports map to specific QSFP ports based on chip position (U1-U8)
   - Helper functions:
-    - `get_connected_port()`: Query connection
-    - `get_all_connections_for_device()`: Get all connections
+    - `get_connected_port()`: Query platform connection
+    - `get_qsfp_port()`: Get QSFP port number for cable connector ports
+    - `get_all_connections_for_device()`: Get all platform connections
     - `get_port_status()`: Determine port category
     - `normalize_bus_id()`, `normalize_eth_port()`: Input normalization
     - `get_ubb_from_bus_id()`, `get_chip_from_bus_id()`: Parse identifiers
@@ -303,10 +312,15 @@ Platform topology data and queries.
 
 **Usage:**
 ```python
-from bh_glx_data.hardware.platform_topology import get_connected_port
+from bh_glx_data.hardware.platform_topology import get_connected_port, get_qsfp_port
 
+# Query platform connection
 connection = get_connected_port("01:00.0", "ETH07")
 # Returns: ("05:00.0", "ETH00")
+
+# Query QSFP port mapping for cable connector
+qsfp = get_qsfp_port("01:00.0", "ETH10")
+# Returns: 7  (QSFP-7)
 ```
 
 ### Data Pipeline Flow
@@ -414,15 +428,20 @@ When writing tests:
 
 - Use the `hardware.platform_topology` module to understand port connections:
   ```python
-  from bh_glx_data.hardware.platform_topology import get_connected_port
+  from bh_glx_data.hardware.platform_topology import get_connected_port, get_qsfp_port
 
-  # Find connected port
+  # Find platform-connected port
   connection = get_connected_port("01:00.0", "ETH07")
   # Returns: ("05:00.0", "ETH00")
+
+  # Find QSFP port for cable connector
+  qsfp = get_qsfp_port("01:00.0", "ETH10")
+  # Returns: 7 (QSFP-7)
   ```
 - Use this to identify connected ports failing together
-- Cable connector ports route to other cable connector ports
-- Infer cable port pairings from failure patterns
+- Cable connector ports map to QSFP ports (QSFP-1 through QSFP-14)
+- Each QSFP port has 2 ETH ports sharing 8 serdes lanes
+- QSFP mapping is consistent across all UBBs (based on chip U1-U8, not UBB)
 
 #### Failure Analysis Workflow
 

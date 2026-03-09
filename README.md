@@ -255,11 +255,14 @@ bh-extract-quanta --help
 
 ### Platform Topology Queries
 
-Query ETH port connectivity between chips:
+Query ETH port connectivity between chips and QSFP port mappings:
 
 ```bash
-# Query specific connection
+# Query specific platform connection
 bh-topology 01:00.0 ETH07
+
+# Query QSFP port mapping (for cable connector ports)
+bh-topology 01:00.0 ETH10
 
 # Show all connections for a device
 bh-topology 01:00.0 --all
@@ -279,10 +282,15 @@ bh-topology --help
 - 8 chips per UBB (U1-U8)
 - 14 ETH ports per chip (ETH00-ETH13)
 - Port categories: unused, unconnected, cable connector, platform connected
+- 14 QSFP ports (QSFP-1 through QSFP-14), each with 2 ETH ports
 
 **Example Output:**
 ```
+# Platform connection
 UBB1/U1 (01:00.0) ETH07 -> UBB1/U5 (05:00.0) ETH00
+
+# QSFP mapping
+UBB1/U1 (01:00.0) ETH10 -> UBB1 QSFP-7
 ```
 
 ---
@@ -541,6 +549,16 @@ MIT License - See LICENSE file for details
 
 ## Changelog
 
+### Version 0.1.1 (2026-03-09)
+
+**New Features**
+
+- ✨ QSFP port mapping for cable connector ports
+  - Added `get_qsfp_port()` function to query QSFP port numbers
+  - Cable connector ports now display QSFP mappings (QSFP-1 through QSFP-14)
+  - Updated `bh-topology` CLI to show QSFP port connections
+  - Comprehensive test coverage for all 14 QSFP port mappings
+
 ### Version 0.1.0 (2026-03-05)
 
 **Initial Release**
@@ -556,5 +574,5 @@ MIT License - See LICENSE file for details
 
 ---
 
-**Last Updated:** 2026-03-05
-**Package Version:** 0.1.0
+**Last Updated:** 2026-03-09
+**Package Version:** 0.1.1
