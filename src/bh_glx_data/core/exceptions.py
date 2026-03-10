@@ -153,3 +153,32 @@ class TemplateError(ExcelGenerationError):
         if self.template_path:
             return f"{self.message} (Template: {self.template_path})"
         return self.message
+
+
+# Hardware/Topology Errors
+
+
+class TopologyError(BHGlxDataError):
+    """Raised when topology query fails."""
+
+    pass
+
+
+class CableConfigError(BHGlxDataError):
+    """Raised when cable configuration loading fails."""
+
+    def __init__(self, message: str, config_spec: str = None):
+        """Initialize cable config error.
+
+        Args:
+            message: Error message
+            config_spec: Config name or path that failed to load
+        """
+        super().__init__(message)
+        self.config_spec = config_spec
+
+    def __str__(self):
+        """Return string representation with config spec."""
+        if self.config_spec:
+            return f"{self.message} (Config: {self.config_spec})"
+        return self.message

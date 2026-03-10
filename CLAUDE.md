@@ -143,11 +143,16 @@ bh-topology 01:00.0 ETH07
 # Query QSFP port mapping (for cable connector ports)
 bh-topology 01:00.0 ETH10
 
+# Query with cable configuration (shows full device-to-device path)
+bh-topology 01:00.0 ETH10 qc3                    # Named config
+bh-topology 01:00.0 ETH10 ./cables/custom.yaml   # File path
+
 # Show all connections for device
 bh-topology 01:00.0 --all
 
 # JSON output
 bh-topology 01:00.0 ETH07 --json
+bh-topology 01:00.0 ETH10 qc3 --json
 ```
 
 **Note:** Old scripts (`python3 src/*.py`) still work but show deprecation warnings. See `docs/MIGRATION_GUIDE.md` for migration instructions.
@@ -188,7 +193,7 @@ Provides foundational abstractions used across the package.
   - Data: `DataProcessingError`, `CSVParseError`
   - Jira: `JiraConnectionError`, `JiraAuthenticationError`
   - Excel: `ExcelGenerationError`, `TemplateError`
-  - Hardware: `TopologyError`
+  - Hardware: `TopologyError`, `CableConfigError`
 
 #### Jira Integration Module (`jira_integration/`)
 
@@ -303,16 +308,31 @@ Platform topology data and queries.
   - Helper functions:
     - `get_connected_port()`: Query platform connection
     - `get_qsfp_port()`: Get QSFP port number for cable connector ports
+    - `get_eth_ports_for_qsfp()`: Reverse lookup - get ETH ports for a QSFP port
+    - `get_cable_path()`: Resolve full device-to-device path through cables
     - `get_all_connections_for_device()`: Get all platform connections
     - `get_port_status()`: Determine port category
     - `normalize_bus_id()`, `normalize_eth_port()`: Input normalization
     - `get_ubb_from_bus_id()`, `get_chip_from_bus_id()`: Parse identifiers
 
+- **`cable_config.py`**: Cable configuration management
+  - `CableConfigManager`: Load and query cable configuration files
+  - Supports named configs (searched in `~/.config/bh-glx-data/cables/` and `./cables/`)
+  - Supports explicit file paths (relative or absolute)
+  - YAML format defines QSFP-to-QSFP cable connections
+  - Bidirectional mapping for cable connections
+  - Validation of QSFP port numbers (1-14) and connection format
+  - Methods:
+    - `load(config_spec)`: Load cable configuration
+    - `get_connected_qsfp(ubb_num, qsfp_port)`: Query cable connection
+    - `is_loaded()`: Check if configuration is loaded
+
 - **`cli.py`**: CLI entry point for `bh-topology`
 
 **Usage:**
 ```python
-from bh_glx_data.hardware.platform_topology import get_connected_port, get_qsfp_port
+from bh_glx_data.hardware.platform_topology import get_connected_port, get_qsfp_port, get_cable_path
+from bh_glx_data.hardware.cable_config import CableConfigManager
 
 # Query platform connection
 connection = get_connected_port("01:00.0", "ETH07")
@@ -321,6 +341,26 @@ connection = get_connected_port("01:00.0", "ETH07")
 # Query QSFP port mapping for cable connector
 qsfp = get_qsfp_port("01:00.0", "ETH10")
 # Returns: 7  (QSFP-7)
+
+# Query full cable path with configuration
+cable_config = CableConfigManager()
+cable_config.load("qc3")  # Load named config
+path = get_cable_path("01:00.0", "ETH10", cable_config)
+# Returns: {
+#   "source": {"bus_id": "01:00.0", "eth_port": "ETH10", "qsfp_port": 7, "ubb": 1},
+#   "cable": {"source_qsfp": 7, "dest_qsfp": 8, "source_ubb": 1, "dest_ubb": 1},
+#   "destination": {"bus_id": "05:00.0", "eth_port": "ETH10", "qsfp_port": 8, "ubb": 1}
+# }
+```
+
+**Cable Configuration Format** (`cables/qc3.yaml`):
+```yaml
+UBB1:
+  - QSFP-1 <> QSFP-2
+  - QSFP-7 <> QSFP-8
+UBB2:
+  - QSFP-1 <> QSFP-2
+  - QSFP-7 <> QSFP-8
 ```
 
 ### Data Pipeline Flow

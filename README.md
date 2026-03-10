@@ -264,11 +264,16 @@ bh-topology 01:00.0 ETH07
 # Query QSFP port mapping (for cable connector ports)
 bh-topology 01:00.0 ETH10
 
+# Query with cable configuration (NEW)
+bh-topology 01:00.0 ETH10 qc3                    # Named config
+bh-topology 01:00.0 ETH10 ./cables/custom.yaml   # File path
+
 # Show all connections for a device
 bh-topology 01:00.0 --all
 
 # JSON output for scripting
 bh-topology 01:00.0 ETH07 --json
+bh-topology 01:00.0 ETH10 qc3 --json
 
 # Bidirectional lookup
 bh-topology 05:00.0 ETH00 --bidirectional
@@ -284,13 +289,34 @@ bh-topology --help
 - Port categories: unused, unconnected, cable connector, platform connected
 - 14 QSFP ports (QSFP-1 through QSFP-14), each with 2 ETH ports
 
+**Cable Configuration Support:**
+
+The topology tool now supports cable configuration files that define how external cables connect QSFP ports. This enables full device-to-device path tracing through cable connections.
+
+Cable configurations can be specified as:
+- **Named configs**: Searched in `~/.config/bh-glx-data/cables/` and `./cables/`
+- **File paths**: Relative or absolute paths to YAML configuration files
+
+Example cable configuration (`cables/qc3.yaml`):
+```yaml
+UBB1:
+  - QSFP-1 <> QSFP-2
+  - QSFP-7 <> QSFP-8
+UBB2:
+  - QSFP-1 <> QSFP-2
+  - QSFP-7 <> QSFP-8
+```
+
 **Example Output:**
 ```
 # Platform connection
 UBB1/U1 (01:00.0) ETH07 -> UBB1/U5 (05:00.0) ETH00
 
-# QSFP mapping
+# QSFP mapping (without cable config)
 UBB1/U1 (01:00.0) ETH10 -> UBB1 QSFP-7
+
+# Full cable path (with cable config)
+01:00.0 ETH10 -> QSFP-7 <-> QSFP-8 -> 05:00.0 ETH10
 ```
 
 ---
@@ -329,7 +355,10 @@ bh-glx-data/
 │   │   └── cli.py                      # CLI interface
 │   └── hardware/                       # Platform topology
 │       ├── platform_topology.py        # Topology data
+│       ├── cable_config.py             # Cable configuration management
 │       └── cli.py                      # CLI interface
+├── cables/                             # Cable configurations
+│   └── qc3.yaml                        # QC3 test cable setup
 ├── tests/                              # Test suite
 │   ├── conftest.py                     # Test fixtures
 │   ├── unit/                           # Unit tests

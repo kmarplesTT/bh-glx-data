@@ -1,0 +1,45 @@
+# QC3 Cable Configuration
+# QSFP port connections for UBB test setup
+#
+# This configuration defines how external cables connect QSFP ports
+# on each UBB during QC3 testing. Each entry shows which QSFP ports
+# are connected via cables.
+#
+# Format: QSFP-X <> QSFP-Y
+# This indicates a bidirectional cable connection between QSFP-X and QSFP-Y
+
+UBB1:
+  - QSFP-1 <> QSFP-2
+  - QSFP-3 <> QSFP-5
+  - QSFP-4 <> QSFP-6
+  - QSFP-7 <> QSFP-8
+  - QSFP-9 <> QSFP-10
+  - QSFP-11 <> QSFP-12
+  - QSFP-13 <> QSFP-14
+
+UBB2:
+  - QSFP-1 <> QSFP-2
+  - QSFP-3 <> QSFP-5
+  - QSFP-4 <> QSFP-6
+  - QSFP-7 <> QSFP-8
+  - QSFP-9 <> QSFP-10
+  - QSFP-11 <> QSFP-12
+  - QSFP-13 <> QSFP-14
+
+UBB3:
+  - QSFP-1 <> QSFP-2
+  - QSFP-3 <> QSFP-5
+  - QSFP-4 <> QSFP-6
+  - QSFP-7 <> QSFP-8
+  - QSFP-9 <> QSFP-10
+  - QSFP-11 <> QSFP-12
+  - QSFP-13 <> QSFP-14
+
+UBB4:
+  - QSFP-1 <> QSFP-2
+  - QSFP-3 <> QSFP-5
+  - QSFP-4 <> QSFP-6
+  - QSFP-7 <> QSFP-8
+  - QSFP-9 <> QSFP-10
+  - QSFP-11 <> QSFP-12
+  - QSFP-13 <> QSFP-14

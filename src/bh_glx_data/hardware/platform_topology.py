@@ -30,7 +30,7 @@ Data Structures:
 - PLATFORM_TOPOLOGY: Maps (bus_id, eth_port) to connected (bus_id, eth_port)
 """
 
-from typing import Dict, Optional, Set, Tuple
+from typing import Any, Dict, Optional, Set, Tuple
 
 # Type aliases for clarity
 BusId = str  # Format: "XY:00.0"
@@ -397,6 +397,168 @@ def get_qsfp_port(bus_id: str, eth_port: str) -> Optional[int]:
     """
     chip_num = get_chip_from_bus_id(bus_id)
     return QSFP_PORT_MAPPING.get((chip_num, eth_port))
+
+
+# Cache for reverse QSFP lookup
+_REVERSE_QSFP_CACHE: Optional[Dict[Tuple[int, int], Set[Tuple[str, str]]]] = None
+
+
+def get_eth_ports_for_qsfp(ubb_num: int, qsfp_port: int) -> Set[Tuple[str, str]]:
+    """Get ETH ports that map to a given QSFP port.
+
+    This function performs a reverse lookup of the QSFP_PORT_MAPPING to find all
+    ETH ports on a specific UBB that connect to the given QSFP port. The result
+    is cached for performance.
+
+    Args:
+        ubb_num: UBB number (1-4)
+        qsfp_port: QSFP port number (1-14)
+
+    Returns:
+        Set of (bus_id, eth_port) tuples that map to this QSFP port
+
+    Example:
+        >>> get_eth_ports_for_qsfp(1, 7)
+        {("01:00.0", "ETH10"), ("02:00.0", "ETH10")}
+    """
+    global _REVERSE_QSFP_CACHE
+
+    # Build cache on first call
+    if _REVERSE_QSFP_CACHE is None:
+        _REVERSE_QSFP_CACHE = {}
+        for (chip_num, eth_port), qsfp_num in QSFP_PORT_MAPPING.items():
+            # For each UBB, create bus_id from chip number
+            for ubb in range(1, 5):
+                bus_id = _get_bus_id_from_ubb_chip(ubb, chip_num)
+                key = (ubb, qsfp_num)
+                if key not in _REVERSE_QSFP_CACHE:
+                    _REVERSE_QSFP_CACHE[key] = set()
+                _REVERSE_QSFP_CACHE[key].add((bus_id, eth_port))
+
+    return _REVERSE_QSFP_CACHE.get((ubb_num, qsfp_port), set())
+
+
+def _get_bus_id_from_ubb_chip(ubb_num: int, chip_num: int) -> str:
+    """Build bus_id from UBB number and chip number.
+
+    Args:
+        ubb_num: UBB number (1-4)
+        chip_num: Chip number (1-8)
+
+    Returns:
+        Bus ID in format "XY:00.0"
+
+    Example:
+        >>> _get_bus_id_from_ubb_chip(1, 1)
+        "01:00.0"
+        >>> _get_bus_id_from_ubb_chip(2, 5)
+        "45:00.0"
+    """
+    # UBB mapping: 1->0, 2->4, 3->c, 4->8
+    ubb_map = {1: "0", 2: "4", 3: "c", 4: "8"}
+    return f"{ubb_map[ubb_num]}{chip_num}:00.0"
+
+
+def get_cable_path(bus_id: str, eth_port: str, cable_config) -> Optional[Dict[str, Any]]:
+    """Resolve full cable path from source to destination device.
+
+    This function traces a complete path through external cable connections:
+    1. Maps source ETH port to QSFP port
+    2. Looks up cable connection in cable config
+    3. Maps destination QSFP port back to ETH ports
+    4. Returns complete path information
+
+    Args:
+        bus_id: Source device bus ID (e.g., "01:00.0")
+        eth_port: Source ETH port (e.g., "ETH10")
+        cable_config: Loaded CableConfigManager instance
+
+    Returns:
+        Dictionary with full path information:
+        {
+            "source": {
+                "bus_id": "01:00.0",
+                "eth_port": "ETH10",
+                "qsfp_port": 7,
+                "ubb": 1
+            },
+            "cable": {
+                "source_qsfp": 7,
+                "dest_qsfp": 8,
+                "source_ubb": 1,
+                "dest_ubb": 1
+            },
+            "destination": {
+                "bus_id": "05:00.0",
+                "eth_port": "ETH10",
+                "qsfp_port": 8,
+                "ubb": 1
+            }
+        }
+
+        Returns None if:
+        - Port is not a cable connector
+        - Cable config not loaded
+        - Connected port not found in cable config
+        - Destination port cannot be resolved
+
+    Example:
+        >>> cable_config = CableConfigManager()
+        >>> cable_config.load("qc3")
+        >>> path = get_cable_path("01:00.0", "ETH10", cable_config)
+        >>> print(path["cable"]["dest_qsfp"])  # 8
+    """
+    # 1. Check if cable connector port
+    if get_port_status(bus_id, eth_port) != "cable_connector":
+        return None
+
+    # 2. Get source QSFP port
+    source_qsfp = get_qsfp_port(bus_id, eth_port)
+    if source_qsfp is None:
+        return None
+
+    # 3. Get source UBB
+    source_ubb = get_ubb_from_bus_id(bus_id)
+
+    # 4. Look up cable connection
+    if cable_config is None or not cable_config.is_loaded():
+        return None
+
+    cable_dest = cable_config.get_connected_qsfp(source_ubb, source_qsfp)
+    if cable_dest is None:
+        return None
+
+    dest_ubb, dest_qsfp = cable_dest
+
+    # 5. Reverse lookup to find destination ETH port
+    dest_ports = get_eth_ports_for_qsfp(dest_ubb, dest_qsfp)
+    if not dest_ports:
+        return None
+
+    # Pick first port (both are equivalent for same QSFP)
+    dest_bus_id, dest_eth_port = next(iter(dest_ports))
+
+    # 6. Build result structure
+    return {
+        "source": {
+            "bus_id": bus_id,
+            "eth_port": eth_port,
+            "qsfp_port": source_qsfp,
+            "ubb": source_ubb,
+        },
+        "cable": {
+            "source_qsfp": source_qsfp,
+            "dest_qsfp": dest_qsfp,
+            "source_ubb": source_ubb,
+            "dest_ubb": dest_ubb,
+        },
+        "destination": {
+            "bus_id": dest_bus_id,
+            "eth_port": dest_eth_port,
+            "qsfp_port": dest_qsfp,
+            "ubb": dest_ubb,
+        },
+    }
 
 
 def get_connected_port(bus_id: str, eth_port: str) -> Optional[Connection]:

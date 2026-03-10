@@ -6,19 +6,23 @@ import logging
 import sys
 from pathlib import Path
 
+from bh_glx_data.hardware.cable_config import CableConfigManager
 from bh_glx_data.hardware.platform_topology import (
     CABLE_CONNECTOR_PORTS_BY_CHIP,
     PLATFORM_TOPOLOGY,
     format_device_info,
     get_all_connections_for_device,
+    get_cable_path,
     get_chip_from_bus_id,
     get_connected_port,
+    get_eth_ports_for_qsfp,
     get_port_status,
     get_qsfp_port,
     get_ubb_from_bus_id,
     normalize_bus_id,
     normalize_eth_port,
 )
+from bh_glx_data.core.exceptions import CableConfigError, ValidationError
 
 # Configure logging
 logging.basicConfig(level=logging.WARNING, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -40,12 +44,17 @@ Examples:
   %(prog)s 01:00.0 ETH07
   %(prog)s 01 7              # Shorthand format
 
+  # Query with cable configuration
+  %(prog)s 01:00.0 ETH10 qc3                    # Named config
+  %(prog)s 01:00.0 ETH10 ./cables/qc3.yaml      # File path
+
   # Show all connections for a device
   %(prog)s 01:00.0 --all
   %(prog)s 01 --all          # Shorthand format
 
   # JSON output for programmatic use
   %(prog)s 01:00.0 ETH07 --json
+  %(prog)s 01:00.0 ETH10 qc3 --json
 
   # Bidirectional lookup
   %(prog)s 05:00.0 ETH00 --bidirectional
@@ -65,6 +74,12 @@ ETH Port Categories:
     parser.add_argument("bus_id", help="Bus ID of the source device (e.g., '01:00.0' or '01')")
     parser.add_argument(
         "eth_port", nargs="?", help="ETH port to query (e.g., 'ETH07' or '7'). Omit to use --all"
+    )
+    parser.add_argument(
+        "cable_config",
+        nargs="?",
+        help="Cable configuration name (e.g., 'qc3') or path to YAML file. "
+             "Shows full device-to-device path through cables when provided.",
     )
     parser.add_argument(
         "--all", "-a", action="store_true", help="Show all connections for the device"
@@ -95,6 +110,17 @@ def main():
     except Exception as e:
         print(f"Error: Invalid bus_id format '{args.bus_id}': {e}", file=sys.stderr)
         sys.exit(1)
+
+    # Load cable configuration if provided
+    cable_config = None
+    if args.cable_config:
+        try:
+            cable_config = CableConfigManager()
+            cable_config.load(args.cable_config)
+            logger.info(f"Loaded cable config from: {cable_config.config_path}")
+        except (CableConfigError, ValidationError) as e:
+            print(f"Error loading cable configuration: {e}", file=sys.stderr)
+            sys.exit(1)
 
     # Check if bus_id exists in topology
     device_exists = any(src_bus == bus_id for src_bus, _ in PLATFORM_TOPOLOGY.keys())
@@ -163,26 +189,15 @@ def main():
                 # Check if this port has a QSFP mapping
                 qsfp_port = get_qsfp_port(bus_id, eth_port)
                 if qsfp_port:
-                    # Display QSFP connection
-                    ubb = get_ubb_from_bus_id(bus_id)
-                    if args.json:
-                        output = {
-                            "source": {
-                                "bus_id": bus_id,
-                                "eth_port": eth_port,
-                                "device": format_device_info(bus_id),
-                            },
-                            "destination": {
-                                "qsfp_port": qsfp_port,
-                                "ubb": ubb,
-                                "description": f"UBB{ubb} QSFP-{qsfp_port}",
-                            },
-                        }
-                        print(json.dumps(output, indent=2))
-                    else:
-                        print(
-                            f"{format_device_info(bus_id)} ({bus_id}) {eth_port} -> UBB{ubb} QSFP-{qsfp_port}"
-                        )
+                    # Try cable path resolution if config loaded
+                    if cable_config and cable_config.is_loaded():
+                        path_info = get_cable_path(bus_id, eth_port, cable_config)
+                        if path_info:
+                            _output_cable_path(path_info, args.json, args.bidirectional)
+                            sys.exit(0)
+
+                    # Fall back to QSFP-only output
+                    _output_qsfp_port(bus_id, eth_port, qsfp_port, args.json)
                     sys.exit(0)
                 else:
                     # Cable connector but no QSFP mapping (shouldn't happen)
@@ -247,6 +262,61 @@ def main():
         print("Error: Either specify an eth_port or use --all", file=sys.stderr)
         print("Run with --help for usage information", file=sys.stderr)
         sys.exit(1)
+
+
+def _output_qsfp_port(bus_id: str, eth_port: str, qsfp_port: int, json_format: bool) -> None:
+    """Output QSFP port mapping (current behavior without cable config).
+
+    Args:
+        bus_id: Source device bus ID
+        eth_port: Source ETH port
+        qsfp_port: QSFP port number
+        json_format: Whether to output in JSON format
+    """
+    ubb = get_ubb_from_bus_id(bus_id)
+    if json_format:
+        output = {
+            "source": {
+                "bus_id": bus_id,
+                "eth_port": eth_port,
+                "device": format_device_info(bus_id),
+            },
+            "destination": {
+                "qsfp_port": qsfp_port,
+                "ubb": ubb,
+                "description": f"UBB{ubb} QSFP-{qsfp_port}",
+            },
+        }
+        print(json.dumps(output, indent=2))
+    else:
+        print(
+            f"{format_device_info(bus_id)} ({bus_id}) {eth_port} -> "
+            f"UBB{ubb} QSFP-{qsfp_port}"
+        )
+
+
+def _output_cable_path(path_info: dict, json_format: bool, bidirectional: bool = False) -> None:
+    """Output full cable path information with cable configuration.
+
+    Args:
+        path_info: Path information dictionary from get_cable_path()
+        json_format: Whether to output in JSON format
+        bidirectional: Whether to show bidirectional connection info (future use)
+    """
+    if json_format:
+        print(json.dumps(path_info, indent=2))
+    else:
+        src = path_info["source"]
+        cable = path_info["cable"]
+        dst = path_info["destination"]
+
+        # Format: 01:00.0 ETH10 -> QSFP-7 <-> QSFP-8 -> 05:00.0 ETH10
+        output = (
+            f"{src['bus_id']} {src['eth_port']} -> "
+            f"QSFP-{cable['source_qsfp']} <-> QSFP-{cable['dest_qsfp']} -> "
+            f"{dst['bus_id']} {dst['eth_port']}"
+        )
+        print(output)
 
 
 if __name__ == "__main__":

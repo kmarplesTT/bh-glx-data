@@ -8,16 +8,20 @@ from bh_glx_data.hardware.platform_topology import (
     QSFP_PORT_MAPPING,
     UNCONNECTED_PORTS,
     UNUSED_PORTS,
+    _get_bus_id_from_ubb_chip,
     format_device_info,
     get_all_connections_for_device,
+    get_cable_path,
     get_chip_from_bus_id,
     get_connected_port,
+    get_eth_ports_for_qsfp,
     get_port_status,
     get_qsfp_port,
     get_ubb_from_bus_id,
     normalize_bus_id,
     normalize_eth_port,
 )
+from bh_glx_data.hardware.cable_config import CableConfigManager
 
 
 class TestTopologyData:
@@ -523,3 +527,223 @@ class TestEdgeCases:
         # Test UBB3 device
         connections = get_all_connections_for_device("c5:00.0")
         assert len(connections) > 0
+
+
+class TestHelperFunctions:
+    """Test helper functions for cable configuration support."""
+
+    def test_get_bus_id_from_ubb_chip_ubb1(self):
+        """Test building bus_id from UBB1 and chip numbers."""
+        assert _get_bus_id_from_ubb_chip(1, 1) == "01:00.0"
+        assert _get_bus_id_from_ubb_chip(1, 2) == "02:00.0"
+        assert _get_bus_id_from_ubb_chip(1, 8) == "08:00.0"
+
+    def test_get_bus_id_from_ubb_chip_ubb2(self):
+        """Test building bus_id from UBB2 and chip numbers."""
+        assert _get_bus_id_from_ubb_chip(2, 1) == "41:00.0"
+        assert _get_bus_id_from_ubb_chip(2, 5) == "45:00.0"
+        assert _get_bus_id_from_ubb_chip(2, 8) == "48:00.0"
+
+    def test_get_bus_id_from_ubb_chip_ubb3(self):
+        """Test building bus_id from UBB3 and chip numbers."""
+        assert _get_bus_id_from_ubb_chip(3, 1) == "c1:00.0"
+        assert _get_bus_id_from_ubb_chip(3, 5) == "c5:00.0"
+        assert _get_bus_id_from_ubb_chip(3, 8) == "c8:00.0"
+
+    def test_get_bus_id_from_ubb_chip_ubb4(self):
+        """Test building bus_id from UBB4 and chip numbers."""
+        assert _get_bus_id_from_ubb_chip(4, 1) == "81:00.0"
+        assert _get_bus_id_from_ubb_chip(4, 5) == "85:00.0"
+        assert _get_bus_id_from_ubb_chip(4, 8) == "88:00.0"
+
+
+class TestReverseQSFPLookup:
+    """Test reverse QSFP to ETH port lookup."""
+
+    def test_get_eth_ports_for_qsfp_7(self):
+        """Test getting ETH ports for QSFP-7 (U1 ETH10, U2 ETH10)."""
+        # UBB1 QSFP-7
+        ports = get_eth_ports_for_qsfp(1, 7)
+        assert len(ports) == 2
+        assert ("01:00.0", "ETH10") in ports
+        assert ("02:00.0", "ETH10") in ports
+
+        # UBB2 QSFP-7
+        ports = get_eth_ports_for_qsfp(2, 7)
+        assert len(ports) == 2
+        assert ("41:00.0", "ETH10") in ports
+        assert ("42:00.0", "ETH10") in ports
+
+    def test_get_eth_ports_for_qsfp_1(self):
+        """Test getting ETH ports for QSFP-1 (U5 ETH02, ETH03)."""
+        # UBB1 QSFP-1
+        ports = get_eth_ports_for_qsfp(1, 1)
+        assert len(ports) == 2
+        assert ("05:00.0", "ETH02") in ports
+        assert ("05:00.0", "ETH03") in ports
+
+    def test_get_eth_ports_for_qsfp_3(self):
+        """Test getting ETH ports for QSFP-3 (U1 ETH00, ETH01)."""
+        # UBB1 QSFP-3
+        ports = get_eth_ports_for_qsfp(1, 3)
+        assert len(ports) == 2
+        assert ("01:00.0", "ETH00") in ports
+        assert ("01:00.0", "ETH01") in ports
+
+    def test_get_eth_ports_for_qsfp_10(self):
+        """Test getting ETH ports for QSFP-10 (U7 ETH10, U8 ETH10)."""
+        # UBB3 QSFP-10
+        ports = get_eth_ports_for_qsfp(3, 10)
+        assert len(ports) == 2
+        assert ("c7:00.0", "ETH10") in ports
+        assert ("c8:00.0", "ETH10") in ports
+
+    def test_get_eth_ports_for_invalid_qsfp(self):
+        """Test getting ETH ports for invalid QSFP."""
+        ports = get_eth_ports_for_qsfp(1, 99)
+        assert len(ports) == 0
+
+    def test_get_eth_ports_all_qsfps_covered(self):
+        """Test that all 14 QSFP ports have reverse mappings."""
+        for qsfp in range(1, 15):
+            ports = get_eth_ports_for_qsfp(1, qsfp)
+            assert len(ports) > 0, f"QSFP-{qsfp} should have ETH port mappings"
+
+    def test_reverse_lookup_consistency(self):
+        """Test that reverse lookup is consistent with forward lookup."""
+        # For each QSFP mapping, verify reverse lookup returns correct results
+        for (chip_num, eth_port), qsfp_num in QSFP_PORT_MAPPING.items():
+            # Get reverse lookup for UBB1
+            reverse_ports = get_eth_ports_for_qsfp(1, qsfp_num)
+
+            # Build expected bus_id for this chip on UBB1
+            expected_bus_id = _get_bus_id_from_ubb_chip(1, chip_num)
+
+            # Verify the mapping exists in reverse lookup
+            assert (expected_bus_id, eth_port) in reverse_ports
+
+
+class TestCablePath:
+    """Test cable path resolution."""
+
+    def test_get_cable_path_valid_connection(self, tmp_path):
+        """Test getting full cable path for valid connection."""
+        config_content = """
+UBB1:
+  - QSFP-7 <> QSFP-8
+"""
+        config_file = tmp_path / "test_config.yaml"
+        config_file.write_text(config_content)
+
+        config = CableConfigManager()
+        config.load(str(config_file))
+
+        # Query 01:00.0 ETH10 which maps to QSFP-7
+        path = get_cable_path("01:00.0", "ETH10", config)
+
+        assert path is not None
+        assert path["source"]["bus_id"] == "01:00.0"
+        assert path["source"]["eth_port"] == "ETH10"
+        assert path["source"]["qsfp_port"] == 7
+        assert path["source"]["ubb"] == 1
+
+        assert path["cable"]["source_qsfp"] == 7
+        assert path["cable"]["dest_qsfp"] == 8
+        assert path["cable"]["source_ubb"] == 1
+        assert path["cable"]["dest_ubb"] == 1
+
+        # QSFP-8 maps to U5 ETH10 or U6 ETH10
+        assert path["destination"]["qsfp_port"] == 8
+        assert path["destination"]["ubb"] == 1
+        assert path["destination"]["eth_port"] == "ETH10"
+        assert path["destination"]["bus_id"] in ["05:00.0", "06:00.0"]
+
+    def test_get_cable_path_not_cable_connector(self, tmp_path):
+        """Test getting cable path for non-cable port."""
+        config_content = """
+UBB1:
+  - QSFP-7 <> QSFP-8
+"""
+        config_file = tmp_path / "test_config.yaml"
+        config_file.write_text(config_content)
+
+        config = CableConfigManager()
+        config.load(str(config_file))
+
+        # 01:00.0 ETH04 is platform-connected, not cable connector
+        path = get_cable_path("01:00.0", "ETH04", config)
+        assert path is None
+
+    def test_get_cable_path_no_config(self):
+        """Test getting cable path without config."""
+        path = get_cable_path("01:00.0", "ETH10", None)
+        assert path is None
+
+    def test_get_cable_path_config_not_loaded(self):
+        """Test getting cable path with unloaded config."""
+        config = CableConfigManager()
+        path = get_cable_path("01:00.0", "ETH10", config)
+        assert path is None
+
+    def test_get_cable_path_qsfp_not_in_config(self, tmp_path):
+        """Test getting cable path for QSFP not in config."""
+        config_content = """
+UBB1:
+  - QSFP-1 <> QSFP-2
+"""
+        config_file = tmp_path / "test_config.yaml"
+        config_file.write_text(config_content)
+
+        config = CableConfigManager()
+        config.load(str(config_file))
+
+        # 01:00.0 ETH10 maps to QSFP-7, which is not in config
+        path = get_cable_path("01:00.0", "ETH10", config)
+        assert path is None
+
+    def test_get_cable_path_different_ubbs(self, tmp_path):
+        """Test cable path with cross-UBB connections (if supported)."""
+        config_content = """
+UBB1:
+  - QSFP-7 <> QSFP-8
+UBB2:
+  - QSFP-7 <> QSFP-8
+"""
+        config_file = tmp_path / "test_config.yaml"
+        config_file.write_text(config_content)
+
+        config = CableConfigManager()
+        config.load(str(config_file))
+
+        # Test UBB2 QSFP mapping
+        path = get_cable_path("41:00.0", "ETH10", config)
+        assert path is not None
+        assert path["source"]["ubb"] == 2
+        assert path["cable"]["source_ubb"] == 2
+        assert path["cable"]["dest_ubb"] == 2
+
+    def test_get_cable_path_multiple_qsfps(self, tmp_path):
+        """Test cable path with multiple QSFP connections."""
+        config_content = """
+UBB1:
+  - QSFP-1 <> QSFP-2
+  - QSFP-3 <> QSFP-5
+  - QSFP-7 <> QSFP-8
+"""
+        config_file = tmp_path / "test_config.yaml"
+        config_file.write_text(config_content)
+
+        config = CableConfigManager()
+        config.load(str(config_file))
+
+        # Test QSFP-1 (U5 ETH02/ETH03)
+        path = get_cable_path("05:00.0", "ETH02", config)
+        assert path is not None
+        assert path["cable"]["source_qsfp"] == 1
+        assert path["cable"]["dest_qsfp"] == 2
+
+        # Test QSFP-7 (U1/U2 ETH10)
+        path = get_cable_path("01:00.0", "ETH10", config)
+        assert path is not None
+        assert path["cable"]["source_qsfp"] == 7
+        assert path["cable"]["dest_qsfp"] == 8
