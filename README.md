@@ -8,17 +8,6 @@ A modern Python package for collecting and analyzing test data for BH Galaxy sys
 
 ---
 
-## Features
-
-- 🔌 **Jira Integration** - Download CSV test data from Jira tickets
-- 📊 **Excel Reporting** - Generate organized Excel summaries with pivot tables
-- 📦 **Quanta Extraction** - Extract test data from Quanta QC3 test packages
-- 🗺️ **Platform Topology** - Query ETH port connectivity between chips
-- 🛠️ **Data Processing** - Filter and process CSV test data
-- 🎯 **Unified CLI** - Single command with subcommands for all tools
-
----
-
 ## Installation
 
 ### Option 1: Development Installation (Recommended)
@@ -27,6 +16,10 @@ A modern Python package for collecting and analyzing test data for BH Galaxy sys
 # Clone the repository
 git clone <repository-url>
 cd bh-glx-data
+
+# Create virtual environment
+python3 -m venv .venv
+source .venv/bin/activate
 
 # Install in editable mode with development dependencies
 pip install -e ".[dev]"
@@ -43,6 +36,7 @@ pip install git+<repository-url>
 ```
 
 After installation, all commands will be available in your PATH:
+
 ```bash
 bh-glx-data --help
 bh-jira-retrieve --help
@@ -56,13 +50,14 @@ bh-filter-failures --help
 
 ### 1. Configure Environment
 
-Copy the example environment file and add your Jira credentials:
+If planning to retrieve data from Jira, copy the example environment file and add your Jira credentials:
 
 ```bash
 cp .env.example .env
 ```
 
 Edit `.env`:
+
 ```env
 JIRA_SERVER_URL=https://your-jira-instance.atlassian.net
 EMAIL=your-email@example.com
@@ -107,12 +102,14 @@ bh-glx-data <command> [options]
 ```
 
 **Global Options:**
+
 - `--verbose, -v` - Enable verbose logging
 - `--log-level` - Set logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
 - `--version` - Show version information
 - `--help` - Show help message
 
 **Available Commands:**
+
 - `jira-retrieve` - Download CSV attachments from Jira
 - `filter-failures` - Filter failed test rows from CSV
 - `generate-excel` - Generate Excel summaries
@@ -122,6 +119,7 @@ bh-glx-data <command> [options]
 **Direct Shortcuts:**
 
 For convenience, each command is also available as a standalone script:
+
 ```bash
 bh-jira-retrieve     # Same as: bh-glx-data jira-retrieve
 bh-filter-failures   # Same as: bh-glx-data filter-failures
@@ -153,6 +151,7 @@ bh-jira-retrieve --help
 ```
 
 **What it does:**
+
 1. Authenticates with Jira using credentials from `.env`
 2. Retrieves specified tickets
 3. Downloads all CSV attachments
@@ -178,12 +177,14 @@ bh-filter-failures --help
 ```
 
 **What it does:**
+
 - Identifies rows where `test_status` ≠ `ETH_ACTIVE` or `ETH_UNCONNECTED`
 - Creates new CSV with only failures
 - Displays failure breakdown by status type
 
 **Example Output:**
-```
+
+```text
 Total rows read: 12800
 Failures found: 2426
 Failures written to: data_test_results_failures.csv
@@ -214,6 +215,7 @@ bh-generate-excel --help
 ```
 
 **What it does:**
+
 1. Scans CSV files in data directory
 2. Groups by system hostname and firmware version
 3. Separates PRBS and Data test types
@@ -242,12 +244,14 @@ bh-extract-quanta --help
 ```
 
 **What it does:**
+
 - Opens tar.gz archive
 - Extracts nested tar.gz files
 - Finds `data_test_*.csv` and `prbs_test_*.csv` files
 - Saves with descriptive names to `quanta/` directory
 
 **Analyze Mode:**
+
 - Reads Excel file
 - Identifies non-zero failure counts
 - Extracts serial numbers of failed systems
@@ -282,22 +286,17 @@ bh-topology 05:00.0 ETH00 --bidirectional
 bh-topology --help
 ```
 
-**Platform Structure:**
-- 4 UBBs (UBB1-UBB4)
-- 8 chips per UBB (U1-U8)
-- 14 ETH ports per chip (ETH00-ETH13)
-- Port categories: unused, unconnected, cable connector, platform connected
-- 14 QSFP ports (QSFP-1 through QSFP-14), each with 2 ETH ports
-
 **Cable Configuration Support:**
 
 The topology tool now supports cable configuration files that define how external cables connect QSFP ports. This enables full device-to-device path tracing through cable connections.
 
 Cable configurations can be specified as:
+
 - **Named configs**: Searched in `~/.config/bh-glx-data/cables/` and `./cables/`
 - **File paths**: Relative or absolute paths to YAML configuration files
 
 Example cable configuration (`cables/qc3.yaml`):
+
 ```yaml
 UBB1:
   - QSFP-1 <> QSFP-2
@@ -308,6 +307,7 @@ UBB2:
 ```
 
 **Example Output:**
+
 ```
 # Platform connection
 UBB1/U1 (01:00.0) ETH07 -> UBB1/U5 (05:00.0) ETH00
@@ -317,60 +317,6 @@ UBB1/U1 (01:00.0) ETH10 -> UBB1 QSFP-7
 
 # Full cable path (with cable config)
 01:00.0 ETH10 -> QSFP-7 <-> QSFP-8 -> 05:00.0 ETH10
-```
-
----
-
-## Project Structure
-
-```
-bh-glx-data/
-├── pyproject.toml                      # Modern packaging config
-├── requirements.txt                    # Runtime dependencies
-├── requirements-dev.txt                # Development dependencies
-├── README.md                           # This file
-├── CLAUDE.md                           # AI assistant guide
-├── src/bh_glx_data/                    # Main package
-│   ├── __init__.py
-│   ├── cli.py                          # Unified CLI entry point
-│   ├── core/                           # Core abstractions
-│   │   ├── config.py                   # Configuration management
-│   │   ├── models.py                   # Data models
-│   │   └── exceptions.py               # Exception hierarchy
-│   ├── jira_integration/               # Jira data collection
-│   │   ├── client.py                   # Jira API wrapper
-│   │   ├── retriever.py                # CSV download logic
-│   │   └── cli.py                      # CLI interface
-│   ├── data_processing/                # CSV data handling
-│   │   ├── csv_reader.py               # CSV reading utilities
-│   │   ├── filter.py                   # Failure filtering
-│   │   └── cli.py                      # CLI interface
-│   ├── excel_reporting/                # Excel generation
-│   │   ├── generator.py                # Excel creation logic
-│   │   ├── templates.py                # Template management
-│   │   └── cli.py                      # CLI interface
-│   ├── quanta_extraction/              # Quanta QC3 processing
-│   │   ├── extractor.py                # Archive extraction
-│   │   ├── analyzer.py                 # Excel analysis
-│   │   └── cli.py                      # CLI interface
-│   └── hardware/                       # Platform topology
-│       ├── platform_topology.py        # Topology data
-│       ├── cable_config.py             # Cable configuration management
-│       └── cli.py                      # CLI interface
-├── cables/                             # Cable configurations
-│   └── qc3.yaml                        # QC3 test cable setup
-├── tests/                              # Test suite
-│   ├── conftest.py                     # Test fixtures
-│   ├── unit/                           # Unit tests
-│   └── integration/                    # Integration tests
-├── templates/                          # Excel templates
-│   └── system_data_template.xlsx
-├── docs/                               # Documentation
-├── data/                               # CSV data (gitignored)
-├── summaries/                          # Excel reports (gitignored)
-├── quanta/                             # Quanta data (gitignored)
-├── failures/                           # Filtered failures (gitignored)
-└── reports/                            # Analysis reports (gitignored)
 ```
 
 ---
@@ -390,6 +336,7 @@ Configuration is loaded from multiple sources in priority order:
 ### Configuration File Format
 
 `config.yaml`:
+
 ```yaml
 jira:
   # These can also be set via .env file
@@ -409,6 +356,7 @@ data:
 ### Environment Variables
 
 Create `.env` file:
+
 ```env
 # Jira credentials
 JIRA_SERVER_URL=https://your-jira-instance.atlassian.net
@@ -422,21 +370,6 @@ BH_GLX_CONFIG=/path/to/config.yaml
 ---
 
 ## Development
-
-### Setup Development Environment
-
-```bash
-# Clone repository
-git clone <repository-url>
-cd bh-glx-data
-
-# Create virtual environment
-python3 -m venv .venv
-source .venv/bin/activate
-
-# Install in development mode
-pip install -e ".[dev]"
-```
 
 ### Running Tests
 
@@ -531,56 +464,11 @@ bh-glx-data --log-level DEBUG <command> [options]
 
 ---
 
-## Security
-
-- ✅ Credentials stored in `.env` (gitignored, never committed)
-- ✅ `config.yaml` contains only ticket keys (no secrets)
-- ✅ Use API tokens instead of passwords for Jira Cloud
-- ✅ Follow principle of least privilege for Jira permissions
-
----
-
-## Requirements
-
-- **Python:** 3.10 or higher
-- **Platform:** Linux, macOS, Windows
-- **Dependencies:** See `requirements.txt`
-- **Optional:** Jira account for CSV retrieval
-
----
-
-## Contributing
-
-Contributions are welcome! Please:
-
-1. Fork the repository
-2. Create a feature branch
-3. Write tests for new features
-4. Ensure tests pass: `pytest`
-5. Format code: `black src/ tests/`
-6. Submit a pull request
-
----
-
-## License
-
-MIT License - See LICENSE file for details
-
----
-
-## Support
-
-- **Documentation:** See `docs/` directory
-- **Issues:** Report bugs via GitHub issues
-- **Questions:** See CLAUDE.md for development guidelines
-
----
-
 ## Changelog
 
 ### Version 0.1.1 (2026-03-09)
 
-**New Features**
+**New Features**:
 
 - ✨ QSFP port mapping for cable connector ports
   - Added `get_qsfp_port()` function to query QSFP port numbers
@@ -590,7 +478,7 @@ MIT License - See LICENSE file for details
 
 ### Version 0.1.0 (2026-03-05)
 
-**Initial Release**
+**Initial Release**:
 
 - ✨ Modern Python package with src layout
 - ✨ Unified CLI with subcommands

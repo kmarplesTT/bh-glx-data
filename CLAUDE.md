@@ -22,7 +22,7 @@ The tool provides 5 integrated capabilities:
 
 The codebase follows modern Python packaging best practices:
 
-```
+```text
 bh-glx-data/
 ├── src/bh_glx_data/              # Main package (src layout)
 │   ├── __init__.py
@@ -62,98 +62,26 @@ bh-glx-data/
 
 ### Installation
 
+Refer to the @README.md file for detailed installation instrcutions if needed
+
+All CLI commands are available in your path after installation; however the virtual environment must be activated:
+
 ```bash
-# Clone repository
-git clone <repository-url>
-cd bh-glx-data
-
-# Create and activate virtual environment
-python3 -m venv .venv
 source .venv/bin/activate
-
-# Install package in development mode
-pip install -e ".[dev]"
 ```
-
-After installation, all CLI commands are available in your PATH.
 
 ### Running Tests
 
-```bash
-# Run all tests
-pytest tests/
+To run all tests, run `pytest` or `pytest -n auto` to run in parallel. Refer to the @README.md for commands to run tests on a subset of the test suite
 
-# Run specific test file
-pytest tests/unit/test_hardware.py
+### Code Quality Tools
 
-# Run in parallel (faster)
-pytest tests/ -n auto
-```
+Refer to @README.md for available tools to check code quality
 
 ## Common Commands
 
-All tools are now accessed via unified CLI commands:
-
-### Data Collection from Jira
-
-```bash
-# Download CSV files from Jira
-bh-jira-retrieve --tickets SYS-123 SYS-456
-
-# Or use unified CLI
-bh-glx-data jira-retrieve --tickets SYS-123
-```
-
-### Filter Test Failures
-
-```bash
-# Extract only failed test rows
-bh-filter-failures data_test_results.csv
-
-# Specify output file
-bh-filter-failures data_test_results.csv --output failures.csv
-```
-
-### Excel Summary Generation
-
-```bash
-# Generate Excel reports for all systems
-bh-generate-excel
-
-# Process specific systems
-bh-generate-excel --systems bh-glx-b02u02 bh-glx-b03u02
-```
-
-### Quanta Failure Data Extraction
-
-```bash
-# Extract from tar.gz archive
-bh-extract-quanta QC3_UBB_20260128.tar.gz
-
-# Analyze Excel file for failures
-bh-extract-quanta --analyze QC3_S7TK_0128_build_test.xlsx
-```
-
-### Platform Topology Queries
-
-```bash
-# Query specific platform connection
-bh-topology 01:00.0 ETH07
-
-# Query QSFP port mapping (for cable connector ports)
-bh-topology 01:00.0 ETH10
-
-# Query with cable configuration (shows full device-to-device path)
-bh-topology 01:00.0 ETH10 qc3                    # Named config
-bh-topology 01:00.0 ETH10 ./cables/custom.yaml   # File path
-
-# Show all connections for device
-bh-topology 01:00.0 --all
-
-# JSON output
-bh-topology 01:00.0 ETH07 --json
-bh-topology 01:00.0 ETH10 qc3 --json
-```
+All tools are now accessed via unified CLI commands when the virtual environment is activated.
+Refer to the @README.md for example test commands for each tool.
 
 **Note:** Old scripts (`python3 src/*.py`) still work but show deprecation warnings. See `docs/MIGRATION_GUIDE.md` for migration instructions.
 
@@ -212,6 +140,7 @@ Handles Jira API interaction and CSV download.
 - **`cli.py`**: CLI entry point for `bh-jira-retrieve`
 
 **Usage:**
+
 ```python
 from bh_glx_data.jira_integration.client import JiraClient
 from bh_glx_data.jira_integration.retriever import JiraCSVRetriever
@@ -239,6 +168,7 @@ CSV reading, validation, and failure filtering.
 - **`cli.py`**: CLI entry point for `bh-filter-failures`
 
 **Usage:**
+
 ```python
 from bh_glx_data.data_processing.filter import filter_failures
 
@@ -330,6 +260,7 @@ Platform topology data and queries.
 - **`cli.py`**: CLI entry point for `bh-topology`
 
 **Usage:**
+
 ```python
 from bh_glx_data.hardware.platform_topology import get_connected_port, get_qsfp_port, get_cable_path
 from bh_glx_data.hardware.cable_config import CableConfigManager
@@ -354,6 +285,7 @@ path = get_cable_path("01:00.0", "ETH10", cable_config)
 ```
 
 **Cable Configuration Format** (`cables/qc3.yaml`):
+
 ```yaml
 UBB1:
   - QSFP-1 <> QSFP-2
@@ -363,11 +295,14 @@ UBB2:
   - QSFP-7 <> QSFP-8
 ```
 
+**Note** The @failure-pattern-analyzer agent is well-versed in the platform topology and understands how to use this tool to analyze failure data and draw conclusions based on Ethernet port mapping
+
 ### Data Pipeline Flow
 
 1. **Data Collection** → Jira Integration or Quanta Extraction
 2. **Failure Filtering** → Data Processing module
-3. **Reporting** → Excel Reporting
+3. **Failure Analysis (optional)** -> @failure-pattern-analyzer agent
+4. **Reporting (optional)** → Excel Reporting
 
 ### Test Type Identification
 
@@ -438,148 +373,10 @@ Fallback: If `test_type` column is missing, uses filename patterns (`prbs_test`,
 ### Testing Guidelines
 
 When writing tests:
+
 - Use fixtures from `tests/conftest.py`
 - Mock external dependencies (Jira API, filesystem where appropriate)
 - Test both success and error paths
 - Use `tmp_path` fixture for file operations
 - Test edge cases (empty files, missing columns, invalid data)
 - Verify data model field types and values
-
-### Hardware Information
-
-- The hardware being tested is a platform consisting of 32 chips (PCIe devices) with 14 Ethernet ports on each chip, 4 of which are unused (ETH5, ETH8, ETH12, and ETH13)
-- Each Ethernet port (ETH##) is connected to another Ethernet port on the platform
-- 2 ETH ports share a Serdes so one will always act as "Lead" and the other "Follower". The pairs are (Lead, Follow): (ETH00, ETH01), (ETH02, ETH03), (ETH04, ETH06), (ETH09, ETH07), (ETH11, ETH10).
-
-### CSV Parsing and Analysis Guidelines
-
-#### Understanding Test Data
-
-- **Device Identification**: Use `bus_id` to identify PCIe device (chip), not `interface`
-- **Test Success Criteria**:
-  - Data tests: `test_status` = `ETH_ACTIVE`
-  - PRBS tests: `test_status` = `PASS`
-  - Unconnected ports: `test_status` = `ETH_UNCONNECTED` (not a failure)
-- **Test Types**: Defined in `TestType` enum (`core/models.py`):
-  - `SERDES_PRBS`: PRBS tests
-  - `SIMPLE_PACKET`: Data tests
-
-#### Topology and Connectivity
-
-- Use the `hardware.platform_topology` module to understand port connections:
-  ```python
-  from bh_glx_data.hardware.platform_topology import get_connected_port, get_qsfp_port
-
-  # Find platform-connected port
-  connection = get_connected_port("01:00.0", "ETH07")
-  # Returns: ("05:00.0", "ETH00")
-
-  # Find QSFP port for cable connector
-  qsfp = get_qsfp_port("01:00.0", "ETH10")
-  # Returns: 7 (QSFP-7)
-  ```
-- Use this to identify connected ports failing together
-- Cable connector ports map to QSFP ports (QSFP-1 through QSFP-14)
-- Each QSFP port has 2 ETH ports sharing 8 serdes lanes
-- QSFP mapping is consistent across all UBBs (based on chip U1-U8, not UBB)
-
-#### Failure Analysis Workflow
-
-1. **Filter Failures First**:
-   ```bash
-   # Use CLI command
-   bh-filter-failures data_test_results.csv
-
-   # Or programmatically
-   from bh_glx_data.data_processing.filter import filter_failures
-   result = filter_failures(input_csv, output_csv)
-   ```
-
-2. **Focus on Diagnostic Data**:
-   - The `train_status` dictionary contains crucial diagnostic info
-   - Key metrics in `train_status`:
-     - `eth_status.port_status`: Port state
-     - `eth_status.train_status`: Training result
-     - `eth_status.postcode`: Firmware diagnostic code
-     - `serdes_training.cdr_unlocked_cnt`: CDR unlock count
-     - `serdes_training.cdr_unlock_transitions`: CDR unlock transitions
-     - `serdes_training.man_eq_retry_cnt`: Manual EQ retry count
-     - `serdes_training.training_times`: Timeout values
-     - `macpcs_training.macpcs_retry_cnt`: MAC/PCS retry count
-
-#### Failure Signature Documentation
-
-When documenting failure signatures:
-
-**Required Fields**:
-- `port_type` (e.g., `CHIP_TO_QSFPDD`, `CHIP_TO_CHIP`)
-- `train_mode` (e.g., `AW_MANUAL_EQ`, `AW_ANLT_MODE`)
-- Diagnostic indicators (CDR counts, retry counts, timeouts)
-
-**Keep Factual**:
-- Document ONLY what is observed in the data
-- Do NOT include speculative root causes
-- Do NOT suggest firmware changes or investigations
-- Do NOT recommend timeout adjustments
-- Focus on patterns, not interpretations
-
-**Example Good Documentation**:
-```
-Pattern: MANUAL_EQ_TRAINING_TIMEOUT
-Indicators:
-  - test_status: TRAINING_FAIL
-  - train_status: LINK_TRAIN_TIMEOUT_MANUAL_EQ
-  - port_type: CHIP_TO_QSFPDD
-  - train_mode: AW_MANUAL_EQ
-  - sigdet_time_ms: 20000+ (high)
-  - rx_eq_assert_time_ms: varies
-```
-
-#### Diagnostic Data Interpretation
-
-**CDR Unlock Counts**:
-- `cdr_unlocked_cnt`: Number of CDR unlock events
-- Non-zero count is NOT an issue unless `test_status` shows failure
-- Include in reports for context but don't over-emphasize
-
-**LCPLL Lock Failures**:
-- `lcpll_lock_fail_cnt`: LCPLL lock failure count
-- Only relevant if results in `test_status` failure
-- Note in reports but don't flag as primary issue
-
-**Remote Device Info**:
-- `remote_info` in `train_status` provides context but is rarely diagnostic
-- External connections: `remote_pcb_type: ORION` (cable, no remote)
-- Internal connections: `remote_pcb_type: UBB` (chip-to-chip)
-- Focus on training metrics, not remote info
-
-**Priority Metrics** (most diagnostic value):
-1. CDR unlock counts and transitions
-2. Retry counts (manual EQ, ANLT, MAC/PCS)
-3. Training timeout values
-4. Postcode values (firmware diagnostics)
-5. Port status and training status
-
-#### Programmatic API
-
-```python
-# Complete workflow example
-from bh_glx_data.data_processing.filter import filter_failures
-from bh_glx_data.hardware.platform_topology import get_connected_port
-
-# 1. Filter failures
-result = filter_failures('data_test.csv', 'failures.csv')
-print(f"Found {result.failure_count} failures")
-
-# 2. Check topology for connected failures
-# Read failure CSV and analyze port connections
-import csv
-with open('failures.csv', 'r') as f:
-    reader = csv.DictReader(f)
-    for row in reader:
-        bus_id = row['bus_id']
-        eth_id = row['eth_id']
-        connected = get_connected_port(bus_id, eth_id)
-        if connected:
-            print(f"{bus_id} {eth_id} connects to {connected}")
-```
