@@ -2,7 +2,7 @@
 
 A modern Python package for collecting and analyzing test data for BH Galaxy system tests. Includes tools for Jira CSV retrieval, Quanta failure data extraction, Excel report generation, and platform topology queries.
 
-**Version:** 0.1.0 (Alpha)
+**Version:** 0.2.0 (Alpha)
 **Python:** 3.10+
 **License:** MIT
 
@@ -466,6 +466,30 @@ bh-glx-data --log-level DEBUG <command> [options]
 
 ## Changelog
 
+### Version 0.2.0 (2026-03-10)
+
+**New Features**:
+
+- ✨ Cable configuration support for full device-to-device path tracing
+  - Added `CableConfigManager` class for loading and managing cable configurations
+  - New `get_cable_path()` function to resolve complete signal paths through cables
+  - New `get_eth_ports_for_qsfp()` function for reverse QSFP lookups
+  - Support for named configurations (searched in standard directories)
+  - Support for explicit file paths (relative or absolute)
+  - YAML-based configuration format with bidirectional cable mapping
+  - Enhanced `bh-topology` CLI with optional cable configuration argument
+  - Comprehensive validation (YAML syntax, UBB sections, QSFP port numbers)
+  - New documentation: `docs/cable_configuration.md`
+  - 22 new unit tests for cable configuration
+  - 18 new tests for enhanced topology features
+  - 100% backward compatibility maintained
+
+**Example**:
+```bash
+bh-topology 01:00.0 ETH10 qc3
+# Output: 01:00.0 ETH10 -> QSFP-7 <-> QSFP-8 -> 05:00.0 ETH10
+```
+
 ### Version 0.1.1 (2026-03-09)
 
 **New Features**:
@@ -491,5 +515,5 @@ bh-glx-data --log-level DEBUG <command> [options]
 
 ---
 
-**Last Updated:** 2026-03-09
-**Package Version:** 0.1.1
+**Last Updated:** 2026-03-10
+**Package Version:** 0.2.0

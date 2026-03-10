@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **BH Galaxy Data Analysis Tool** - A modern Python package for collecting and analyzing test data for BH Galaxy systems.
 
-**Version:** 0.1.0 (Alpha)
+**Version:** 0.2.0 (Alpha)
 **Python:** 3.10+
 **Architecture:** Modern package with domain-driven design
 

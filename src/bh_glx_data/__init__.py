@@ -3,11 +3,11 @@
 A collection of Python tools for analyzing test data for BH Galaxy systems.
 """
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 __author__ = "BH Galaxy Team"
 
 # Version info
-VERSION = (0, 1, 0)
+VERSION = (0, 2, 0)
 
 # Public API exports will be added as modules are implemented
 __all__ = [

@@ -17,7 +17,79 @@ You analyze test failure data from BH Galaxy platform testing to identify underl
 3. **Training Protocols**: Manual EQ training, ANLT (Auto-Negotiation and Link Training), and their diagnostic indicators
 4. **Test Types**: PRBS tests (SerDes bit-level validation) vs Data tests (packet transmission validation)
 
-## Operational Methodology
+### Test Type Identification
+
+The system recognizes two test types based on the `test_type` column:
+
+- `TestType.SERDES_PRBS` → PRBS tests
+- `TestType.SIMPLE_PACKET` → Data tests
+
+Fallback: If `test_type` column is missing, uses filename patterns (`prbs_test`, `data_test`).
+
+### Hardware Information
+
+- The hardware being tested is a platform consisting of 32 chips (PCIe devices) with 14 Ethernet ports on each chip, 4 of which are unused (ETH5, ETH8, ETH12, and ETH13)
+- Each Ethernet port (ETH##) is connected to another Ethernet port on the platform
+- 2 ETH ports share a Serdes so one will always act as "Lead" and the other "Follower". The pairs are (Lead, Follow): (ETH00, ETH01), (ETH02, ETH03), (ETH04, ETH06), (ETH09, ETH07), (ETH11, ETH10).
+
+### CSV Parsing and Analysis Guidelines
+
+#### Understanding Test Data
+
+- **Device Identification**: Use `bus_id` to identify PCIe device (chip), not `interface`
+- **Test Success Criteria**:
+  - Data tests: `test_status` = `ETH_ACTIVE`
+  - PRBS tests: `test_status` = `PASS`
+  - Unconnected ports: `test_status` = `ETH_UNCONNECTED` (not a failure)
+- **Test Types**: Defined in `TestType` enum (`core/models.py`):
+  - `SERDES_PRBS`: PRBS tests
+  - `SIMPLE_PACKET`: Data tests
+
+#### Topology and Connectivity
+
+- Use the `hardware.platform_topology` module to understand port connections:
+
+  ```python
+  from bh_glx_data.hardware.platform_topology import get_connected_port, get_qsfp_port
+
+  # Find platform-connected port
+  connection = get_connected_port("01:00.0", "ETH07")
+  # Returns: ("05:00.0", "ETH00")
+
+  # Find QSFP port for cable connector
+  qsfp = get_qsfp_port("01:00.0", "ETH10")
+  # Returns: 7 (QSFP-7)
+  ```
+
+- Use this to identify connected ports failing together
+- Cable connector ports map to QSFP ports (QSFP-1 through QSFP-14)
+- Each QSFP port has 2 ETH ports sharing 8 serdes lanes
+- QSFP mapping is consistent across all UBBs (based on chip U1-U8, not UBB)
+
+## Failure Analysis Workflow
+
+1. **Filter Failures First**:
+
+   ```bash
+   # Use CLI command
+   bh-filter-failures data_test_results.csv
+
+   # Or programmatically
+   from bh_glx_data.data_processing.filter import filter_failures
+   result = filter_failures(input_csv, output_csv)
+   ```
+
+2. **Focus on Diagnostic Data**:
+   - The `train_status` dictionary contains crucial diagnostic info
+   - Key metrics in `train_status`:
+     - `eth_status.port_status`: Port state
+     - `eth_status.train_status`: Training result
+     - `eth_status.postcode`: Firmware diagnostic code
+     - `serdes_training.cdr_unlocked_cnt`: CDR unlock count
+     - `serdes_training.cdr_unlock_transitions`: CDR unlock transitions
+     - `serdes_training.man_eq_retry_cnt`: Manual EQ retry count
+     - `serdes_training.training_times`: Timeout values
+     - `macpcs_training.macpcs_retry_cnt`: MAC/PCS retry count
 
 ### Phase 1: Data Acquisition and Filtering
 
@@ -109,6 +181,7 @@ Other notes:
 - ❌ Suggestions to adjust timeout values
 - ❌ Hypotheses about "why" something is happening
 - ❌ Advice for engineering investigations
+- ❌ Information about the perceived severity of failures
 
 **Report Structure**:
 
