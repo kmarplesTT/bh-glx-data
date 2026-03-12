@@ -10,17 +10,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **BH Galaxy Data Analysis Tool** - A modern Python package for collecting and analyzing test data for BH Galaxy systems.
 
-**Version:** 0.2.0 (Alpha)
+**Version:** 0.3.0 (Alpha)
 **Python:** 3.10+
 **Architecture:** Modern package with domain-driven design
 
-The tool provides 5 integrated capabilities:
+The tool provides 6 integrated capabilities:
 
 1. **Jira Integration** - Download CSV test data attachments from Jira tickets
 2. **Data Processing** - Filter and process test failure data
 3. **Excel Reporting** - Generate organized Excel summaries with pivot tables
 4. **Quanta Extraction** - Extract test data from Quanta QC3 test packages
 5. **Platform Topology** - Query ETH port connectivity between chips
+6. **System Analysis** - Aggregate and query PRBS test data with database storage and visualization
 
 ## Package Structure
 
@@ -51,8 +52,18 @@ bh-glx-data/
 │   │   ├── extractor.py          # Archive extraction
 │   │   ├── analyzer.py           # Excel analysis
 │   │   └── cli.py
-│   └── hardware/                 # Platform topology
-│       ├── platform_topology.py  # Topology data
+│   ├── hardware/                 # Platform topology
+│   │   ├── platform_topology.py  # Topology data
+│   │   ├── cable_config.py       # Cable configuration
+│   │   └── cli.py
+│   └── system_analysis/          # PRBS test data analysis
+│       ├── database.py            # SQLite database manager
+│       ├── ingestion.py           # CSV streaming ingestion
+│       ├── query_engine.py        # Query interface
+│       ├── statistics.py          # Statistical calculations
+│       ├── visualization.py       # Tables and heatmaps
+│       ├── export.py              # Excel export
+│       ├── interactive.py         # Interactive shell
 │       └── cli.py
 ├── tests/                        # Comprehensive test suite
 │   ├── unit/                     # Unit tests
@@ -301,12 +312,99 @@ UBB2:
 
 **Note** The @failure-pattern-analyzer agent is well-versed in the platform topology and understands how to use this tool to analyze failure data and draw conclusions based on Ethernet port mapping
 
+#### System Analysis Module (`system_analysis/`)
+
+Database utility for aggregating and querying PRBS test data across multiple systems.
+
+- **`database.py`**: SQLite database management
+  - `DatabaseManager`: Schema creation, connection handling, low-level queries
+  - Tables: `prbs_tests` (test data), `ingestion_metadata` (provenance tracking)
+  - Indexed columns for fast queries (host, bus_id, eth_id, test_status, train_speed)
+  - Support for 8-lane BER data, error counts, timing, test parameters
+  - Default location: `~/.local/share/bh-glx-data/analysis.db`
+
+- **`ingestion.py`**: CSV streaming ingestion
+  - `CSVIngester`: Load CSV files with filtering and streaming
+  - Processes CSV files with pandas chunksize for memory efficiency
+  - Filters by test_status (PASS, BER_THRESHOLD_EXCEEDED, TRAINING_FAIL)
+  - Batch insertion into SQLite database
+  - Records ingestion metadata for provenance
+
+- **`query_engine.py`**: Query interface with lane selection
+  - `QueryEngine`: High-level query abstraction
+  - `LaneSelector`: Flexible lane specification (all/specific ports/wildcards)
+  - Query methods:
+    - `query_ber_statistics()`: Min/max/avg BER per lane
+    - `query_ber_threshold_exceeded()`: Count threshold violations
+    - `query_custom_ber_threshold()`: Custom threshold analysis
+    - `query_training_failures()`: Count training failures
+
+- **`statistics.py`**: Statistical calculations
+  - Lane-level BER statistics (min/max/avg)
+  - Count aggregations by test status
+  - Threshold analysis helpers
+
+- **`visualization.py`**: Tables and heatmaps
+  - `TableRenderer`: Formatted terminal tables with Rich library
+  - `HeatMapRenderer`: Color-coded heatmaps with ANSI colors
+  - Configurable color schemes for count and BER heatmaps
+  - Built-in presets: default, strict, sensitive, tolerant
+
+- **`export.py`**: Excel export functionality
+  - `ExcelExporter`: Export database to Excel with filtering
+  - Multi-sheet workbooks (Summary, PRBS Tests, Training Failures, BER Exceeded, Metadata)
+  - Filtered exports by hosts, speeds, status, date ranges
+  - Conditional formatting for heatmap visualization
+
+- **`interactive.py`**: Interactive REPL shell
+  - `AnalysisShell`: Interactive command-line interface
+  - Commands: stats, threshold, custom, training, systems, speeds, info, export
+  - Command history and result caching
+
+- **`cli.py`**: CLI entry point for `bh-analyze-systems`
+
+**Usage:**
+
+```bash
+# Ingest CSV data
+bh-analyze-systems ingest ./data/
+
+# Query BER statistics
+bh-analyze-systems stats all --speed 200 --format table
+bh-analyze-systems stats 01:00.0/ETH07 --format heatmap --color-scheme strict
+
+# Custom threshold analysis
+bh-analyze-systems custom 01:00.0/* 1e-10
+
+# Export to Excel
+bh-analyze-systems export-excel --output analysis.xlsx --hosts bh-glx-c02u02 --speeds 200
+
+# Interactive shell
+bh-analyze-systems shell
+```
+
+**Lane Selection Syntax:**
+- `all` - All lanes on all systems
+- `01:00.0/ETH07` - Specific port (all lanes)
+- `01:00.0/*` - All ports on bus_id
+- `bh-glx-c02u02/01:00.0/ETH07` - Specific system and port
+- `*/ETH07` - ETH07 on all systems
+
+**Documentation:**
+- Architecture: `docs/system_analysis_architecture.md`
+- User Guide: `docs/user_guides/bh-analyze-systems.md`
+
 ### Data Pipeline Flow
 
 1. **Data Collection** → Jira Integration or Quanta Extraction
 2. **Failure Filtering** → Data Processing module
-3. **Failure Analysis (optional)** -> @failure-pattern-analyzer agent
-4. **Reporting (optional)** → Excel Reporting
+3. **Analysis Path A (Single-System Reporting):**
+   - **Failure Analysis (optional)** → @failure-pattern-analyzer agent
+   - **Reporting (optional)** → Excel Reporting
+4. **Analysis Path B (Multi-System Analysis):**
+   - **Database Ingestion** → System Analysis (bh-analyze-systems ingest)
+   - **Query & Visualization** → System Analysis (stats, threshold, training, etc.)
+   - **Export** → System Analysis (export-excel)
 
 ### Test Type Identification
 

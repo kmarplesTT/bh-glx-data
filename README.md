@@ -2,7 +2,7 @@
 
 A modern Python package for collecting and analyzing test data for BH Galaxy system tests. Includes tools for Jira CSV retrieval, Quanta failure data extraction, Excel report generation, and platform topology queries.
 
-**Version:** 0.2.0 (Alpha)
+**Version:** 0.3.0 (Alpha)
 **Python:** 3.10+
 **License:** MIT
 
@@ -466,6 +466,38 @@ bh-glx-data --log-level DEBUG <command> [options]
 
 ## Changelog
 
+### Version 0.3.0 (2026-03-12)
+
+**New Features**:
+
+- ✨ System Analysis Tool for aggregating and querying PRBS test data
+  - SQLite database with indexed schema for efficient queries
+  - Streaming CSV ingestion with filtering (handles large datasets)
+  - Flexible lane selection syntax (all/specific ports/wildcards)
+  - Query engine for BER statistics, threshold analysis, and training failures
+  - Table and terminal heatmap visualization with configurable color schemes
+  - Excel export with multi-sheet workbooks and filtering
+  - Interactive REPL shell for exploratory analysis
+  - New `bh-analyze-systems` CLI command with 8 subcommands
+  - Comprehensive unit and integration tests (30+ tests)
+  - User guide: `docs/user_guides/bh-analyze-systems.md`
+  - Architecture documentation: `docs/system_analysis_architecture.md`
+
+**Example**:
+```bash
+# Ingest CSV data
+bh-analyze-systems ingest ./data/
+
+# Query BER statistics with heatmap
+bh-analyze-systems stats all --speed 200 --format heatmap
+
+# Export to Excel
+bh-analyze-systems export-excel --output analysis.xlsx
+
+# Interactive shell
+bh-analyze-systems shell
+```
+
 ### Version 0.2.0 (2026-03-10)
 
 **New Features**:
@@ -515,5 +547,5 @@ bh-topology 01:00.0 ETH10 qc3
 
 ---
 
-**Last Updated:** 2026-03-10
-**Package Version:** 0.2.0
+**Last Updated:** 2026-03-12
+**Package Version:** 0.3.0

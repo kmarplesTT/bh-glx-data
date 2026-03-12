@@ -182,3 +182,97 @@ class CableConfigError(BHGlxDataError):
         if self.config_spec:
             return f"{self.message} (Config: {self.config_spec})"
         return self.message
+
+
+# System Analysis Errors
+
+
+class SystemAnalysisError(BHGlxDataError):
+    """Base exception for system analysis module."""
+
+    pass
+
+
+class DatabaseError(SystemAnalysisError):
+    """Raised when database operation fails."""
+
+    def __init__(self, message: str, db_path: str = None, query: str = None):
+        """Initialize database error.
+
+        Args:
+            message: Error message
+            db_path: Path to database that encountered error
+            query: SQL query that failed (if applicable)
+        """
+        super().__init__(message)
+        self.db_path = db_path
+        self.query = query
+
+    def __str__(self):
+        """Return string representation with database info."""
+        parts = [self.message]
+        if self.db_path:
+            parts.append(f"Database: {self.db_path}")
+        if self.query:
+            parts.append(f"Query: {self.query[:100]}")
+        return " | ".join(parts)
+
+
+class IngestionError(SystemAnalysisError):
+    """Raised when CSV ingestion fails."""
+
+    def __init__(self, message: str, file_path: str = None):
+        """Initialize ingestion error.
+
+        Args:
+            message: Error message
+            file_path: Path to CSV file that failed ingestion
+        """
+        super().__init__(message)
+        self.file_path = file_path
+
+    def __str__(self):
+        """Return string representation with file path."""
+        if self.file_path:
+            return f"{self.message} (File: {self.file_path})"
+        return self.message
+
+
+class QueryError(SystemAnalysisError):
+    """Raised when query execution fails."""
+
+    def __init__(self, message: str, lane_spec: str = None):
+        """Initialize query error.
+
+        Args:
+            message: Error message
+            lane_spec: Lane specification that caused error
+        """
+        super().__init__(message)
+        self.lane_spec = lane_spec
+
+    def __str__(self):
+        """Return string representation with lane spec."""
+        if self.lane_spec:
+            return f"{self.message} (Lane Spec: {self.lane_spec})"
+        return self.message
+
+
+class LaneSelectorError(SystemAnalysisError):
+    """Raised when lane specification parsing fails."""
+
+    def __init__(self, message: str, spec: str = None):
+        """Initialize lane selector error.
+
+        Args:
+            message: Error message
+            spec: Lane specification string that failed to parse
+        """
+        super().__init__(message)
+        self.spec = spec
+
+    def __str__(self):
+        """Return string representation with spec."""
+        if self.spec:
+            return f"{self.message} (Spec: {self.spec})"
+        return self.message

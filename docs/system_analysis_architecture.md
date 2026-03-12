@@ -4,7 +4,7 @@
 
 The System Analysis Tool is a database utility for collecting, storing, and analyzing PRBS test data across multiple systems. It provides an efficient query interface with visualization capabilities for analyzing serdes lane performance patterns.
 
-**Version:** 0.3.0 (Planned)
+**Version:** 0.3.0
 **Primary Purpose:** Aggregate and query PRBS test data from CSV files with memory-efficient storage and interactive analysis
 
 ---
