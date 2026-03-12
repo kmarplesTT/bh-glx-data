@@ -2,6 +2,10 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Guidelines for you
+
+**Provide concise answer to questions**: Only include information relevant to the question without being verbose. If I want to know more, I will ask.
+
 ## Project Overview
 
 **BH Galaxy Data Analysis Tool** - A modern Python package for collecting and analyzing test data for BH Galaxy systems.

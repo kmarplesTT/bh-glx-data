@@ -3,17 +3,20 @@
 This document outlines the requirements for a database utility for system analysis. The purpose of the utility is to
 
 - Compile relevant PRBS test data from csv files into a centralized location
-- Identify performance issues on Serdes lanes that are consistent across all systems
 - Provide a clean user interface for supporting specific user requests
 - Manage the memory usage of large amounts of csv data
-
-You are to define and document an architecture for this utility based on the requirements and information below.
+- Provide direct user interaction and visualization of the data
 
 Make sure to include:
 
 - The type of structure that should be used to store all relevant PRBS test data
+- A mechanism for the user to export the data from the structure into excel format
 - User interface definition and supported commands
 - Mechanism by which memory space is to be managed for large amounts of csv data
+
+The utility is to provide information to the user and is not to infer any information from the data
+
+You are to define and document an architecture for this utility based on the requirements and information below.
 
 ## Data Collection
 
