@@ -122,11 +122,6 @@ class TableRenderer:
 
         prev_bus_id = None
         for bus_id in sorted(grouped_lanes.keys()):
-            # Add thick separator (double line) between different bus_ids
-            if prev_bus_id is not None:
-                # Add an empty row styled as a separator for thick line effect
-                table.add_row("", "", "", "", "", "", end_section=True)
-
             prev_eth_id = None
             for eth_id in sorted(grouped_lanes[bus_id].keys()):
                 # Add thin separator between different eth_ids within same bus_id
@@ -208,11 +203,6 @@ class TableRenderer:
 
         prev_bus_id = None
         for bus_id in sorted(grouped_lanes.keys()):
-            # Add thick separator (double line) between different bus_ids
-            if prev_bus_id is not None:
-                # Add an empty row styled as a separator for thick line effect
-                table.add_row("", "", end_section=True)
-
             prev_eth_id = None
             for eth_id in sorted(grouped_lanes[bus_id].keys()):
                 # Add thin separator between different eth_ids within same bus_id
