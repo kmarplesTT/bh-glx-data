@@ -24,11 +24,12 @@ logger = logging.getLogger(__name__)
 
 # ANSI 8-bit color codes for heatmap visualization
 # 5-step color scale: Green → Yellow-Green → Yellow → Orange → Red
-GREEN = "color(46)"           # #00FF00 - Step 1: Excellent/No issues
-YELLOW_GREEN = "color(154)"   # #ADFF2F - Step 2: Good/Minor issues
-YELLOW = "color(226)"         # #FFFF00 - Step 3: Caution/Moderate issues
-ORANGE = "color(214)"         # #FFA500 - Step 4: Warning/Significant issues
-RED = "color(196)"            # #FF0000 - Step 5: Critical/Severe issues
+# Using dimmer colors to match table format brightness
+GREEN = "color(28)"           # Dark green - Step 1: Excellent/No issues
+YELLOW_GREEN = "color(106)"   # Dark yellow-green - Step 2: Good/Minor issues
+YELLOW = "color(184)"         # Dark yellow - Step 3: Caution/Moderate issues
+ORANGE = "color(172)"         # Dark orange - Step 4: Warning/Significant issues
+RED = "color(124)"            # Dark red - Step 5: Critical/Severe issues
 
 
 @dataclass
@@ -491,7 +492,7 @@ class HeatMapRenderer:
 
         # Render each port
         for (bus_id, eth_id), lane_values in sorted(grouped.items()):
-            port_line = f"{bus_id}/{eth_id}  "
+            port_line = f"[white]{bus_id}/{eth_id}  "
 
             # Render 8 lanes
             for lane_num in range(8):
