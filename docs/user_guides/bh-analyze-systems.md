@@ -2,14 +2,21 @@
 
 A database utility for collecting, storing, and analyzing PRBS test data across multiple systems. This tool provides efficient query capabilities with visualization options for identifying serdes lane performance patterns.
 
-**Version:** 0.4.0
+**Version:** 0.5.0
 **Purpose:** Aggregate PRBS test data from CSV files with memory-efficient storage and interactive analysis
 
 ---
 
-## What's New in Version 0.4.0
+## What's New in Version 0.5.0
 
-Version 0.4.0 brings significant improvements to BER statistics handling and visualization:
+Version 0.5.0 introduces advanced variance visualization for diagnosing BER consistency issues:
+
+- **Variance Heatmap** - New `--statistic variance` option displays average BER (color) with variance symbols (shape) to show both magnitude and consistency in a single view
+- **Five Variance Levels** - Symbols indicate consistency: `●` (very consistent), `◆` (consistent), `▲` (moderate variance), `■` (high variance), `✕` (extreme spikes)
+- **Single-Glance Diagnostics** - Quickly identify persistent hardware issues vs. intermittent environmental problems
+- **Variance Indicators** - Based on max/avg ratio, helping distinguish lanes with occasional spikes from consistently problematic lanes
+
+### Version 0.4.0 Highlights
 
 - **High BER Field** - BER values >= 0.1 are now tracked separately in a "High BER" column, providing clearer visibility into severely degraded lanes
 - **Column Order Changed** - Statistics now display in [Min, Avg, Max, High BER] order for better readability
@@ -181,7 +188,7 @@ bh-analyze-systems stats <lane_spec> [OPTIONS]
 
 - `--speed SPEED` - Filter by train speed (can be specified multiple times)
 - `--format {table|heatmap}` - Output format (default: table)
-- `--statistic {avg|min|max|high_ber}` - Statistic to display in heatmap (default: max)
+- `--statistic {avg|min|max|high_ber|variance}` - Statistic to display in heatmap (default: max)
 - `--color-scheme SCHEME` - Color scheme for heatmap (default, sensitive, tolerant)
 
 **Example (Table Format):**
@@ -234,6 +241,7 @@ Displays a color-coded heatmap with BER values across all systems and lanes.
 - `avg` - Display average BER values in heatmap
 - `min` - Display minimum BER values in heatmap
 - `high_ber` - Display count of high BER (>= 0.1) occurrences in heatmap
+- `variance` - Display average BER with variance symbols (shows both magnitude and consistency)
 
 **Notes:**
 
@@ -655,6 +663,71 @@ bh-analyze-systems training all --speed 200 --format heatmap
 
 ---
 
+### Variance Heatmap Visualization
+
+The variance heatmap combines BER magnitude (color) with consistency indicators (symbols) to show both average performance and variability in a single view.
+
+#### Usage
+
+```bash
+# Show variance heatmap for all lanes
+bh-analyze-systems stats all --format heatmap --statistic variance
+
+# Filter by speed
+bh-analyze-systems stats all --format heatmap --statistic variance --speed 200
+
+# Specific ports
+bh-analyze-systems stats 01:00.0/ETH07 --format heatmap --statistic variance
+
+# Use different color schemes
+bh-analyze-systems stats all --format heatmap --statistic variance --color-scheme sensitive
+```
+
+#### Understanding the Variance Heatmap
+
+Each cell displays:
+- **BER value**: Average BER across all test runs
+- **Color**: Indicates BER magnitude (green=good, red=bad)
+- **Symbol**: Indicates consistency/variance
+
+**Variance Symbols:**
+- `●` Very Consistent (max/avg < 2) - Stable, predictable performance
+- `◆` Consistent (max/avg 2-10) - Minor fluctuations
+- `▲` Moderate Variance (max/avg 10-100) - Noticeable spikes
+- `■` High Variance (max/avg 100-1000) - Significant intermittent issues
+- `✕` Extreme Spikes (max/avg ≥ 1000) - Severe occasional failures
+
+#### Diagnostic Patterns
+
+**Healthy Lanes:**
+- Green `●` or `◆` = Excellent and consistent
+- Yellow `●` or `◆` = Good and consistent
+
+**Problem Lanes:**
+- Orange/Red `●` or `◆` = Persistent hardware issues (consistent failures)
+- Green/Yellow `■` or `✕` = Intermittent issues (cable, power, thermal)
+- Orange/Red `■` or `✕` = Severe and unstable (critical problem)
+
+**Troubleshooting Tips:**
+- `✕` symbol → Investigate environmental factors (cables, power, temperature)
+- Consistent `●`/`◆` symbols with high BER → Hardware fault (replace component)
+- Pattern on specific lanes → Serdes lane issue
+- Pattern on specific ports → Port or connector issue
+
+#### Example
+
+```
+01:00.0   ETH07  1.2e-12 ●    1.5e-10 ▲    1.8e-10 ▲    4.5e-10 ✕    1.7e-10 ▲
+```
+
+Interpretation:
+- Lane 0: Excellent and very consistent (`●`)
+- Lanes 1-2: Marginal with moderate spikes (`▲`) - monitor
+- Lane 3: Good average BUT extreme spikes (`✕`) - investigate cables/environment
+- Lane 4: Marginal with moderate spikes (`▲`) - monitor
+
+---
+
 ### Color Schemes
 
 Heatmaps use configurable color schemes to represent values.
@@ -861,6 +934,9 @@ bh-analyze> stats all --speed 200 --format heatmap --statistic avg
 
 bh-analyze> stats all --speed 200 --format heatmap --statistic high_ber
 [displays heatmap of high BER counts]
+
+bh-analyze> stats all --speed 200 --format heatmap --statistic variance
+[displays heatmap with average BER and variance symbols]
 ```
 
 ### Shell Features
@@ -1034,7 +1110,29 @@ bh-analyze-systems export-excel \
   --status PASS
 ```
 
-### Workflow 5: Interactive Exploration
+### Workflow 5: Variance Analysis for Troubleshooting
+
+```bash
+# 1. Start with variance heatmap to get overall picture
+bh-analyze-systems stats all --speed 200 --format heatmap --statistic variance
+
+# 2. Focus on ports with extreme spikes (✕ symbols)
+bh-analyze-systems stats 01:00.0/ETH07 --speed 200 --format table
+
+# 3. Compare with maximum BER to confirm spikes
+bh-analyze-systems stats 01:00.0/ETH07 --speed 200 --format heatmap --statistic max
+
+# 4. Check if training failures are also present
+bh-analyze-systems training 01:00.0/ETH07 --speed 200
+
+# 5. Use sensitive color scheme to identify marginal lanes
+bh-analyze-systems stats all --speed 200 --format heatmap --statistic variance --color-scheme sensitive
+
+# 6. Export findings for hardware team
+bh-analyze-systems export-excel --output variance_analysis.xlsx
+```
+
+### Workflow 6: Interactive Exploration
 
 ```bash
 # Start interactive shell
@@ -1046,13 +1144,14 @@ bh-analyze> systems
 bh-analyze> training all --speed 200 --format heatmap
 bh-analyze> stats 01:00.0/ETH07 --speed 200
 bh-analyze> stats all --speed 200 --format heatmap --statistic avg
+bh-analyze> stats all --speed 200 --format heatmap --statistic variance
 bh-analyze> stats all --speed 200 --format heatmap --statistic high_ber
 bh-analyze> custom 01:00.0/* 1e-10
 bh-analyze> export excel --output session_results.xlsx
 bh-analyze> exit
 ```
 
-### Workflow 6: Integration with Jira Data
+### Workflow 7: Integration with Jira Data
 
 ```bash
 # 1. Retrieve data from Jira
@@ -1310,4 +1409,4 @@ bh-analyze> help
 ---
 
 **Last Updated:** 2026-03-13
-**Tool Version:** 0.4.0
+**Tool Version:** 0.5.0

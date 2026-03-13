@@ -7,3 +7,5 @@ These items potential can be addressed at a later date:
   - an example use-case would be if I see min/max/avg BER stats for a lane and I suspect they are being calculated incorrectly
 - Implement bh-analyze-systems_enhance_heatmap.md
 - When exporting database to excel if the number of rows exceeds the max values supported by excel (1048576), start a new page to continue exporting the data into
+- Fix the failing system_analysis tests
+- Make all the colors in the heatmap a bit more dim -- they are too bright

@@ -169,6 +169,48 @@ def count_by_threshold(
     return counts
 
 
+def calculate_variance_indicator(min_ber: float, avg_ber: float, max_ber: float) -> str:
+    """Calculate variance indicator symbol based on max/avg ratio.
+
+    Args:
+        min_ber: Minimum BER value (currently unused, reserved for future)
+        avg_ber: Average BER value
+        max_ber: Maximum BER value
+
+    Returns:
+        Unicode symbol representing variance level:
+        - "●" (U+25CF): Very consistent (max/avg < 2)
+        - "◆" (U+25C6): Consistent (2 ≤ max/avg < 10)
+        - "▲" (U+25B2): Moderate variance (10 ≤ max/avg < 100)
+        - "■" (U+25A0): High variance (100 ≤ max/avg < 1000)
+        - "✕" (U+2715): Extreme spikes (max/avg ≥ 1000)
+
+    Note:
+        Returns "●" for edge cases where avg_ber is 0 or None,
+        or where max_ber is 0 or None.
+    """
+    # Edge cases
+    if avg_ber is None or max_ber is None:
+        return "●"
+    if avg_ber == 0 or max_ber == 0:
+        return "●"
+
+    # Calculate ratio
+    ratio = max_ber / avg_ber
+
+    # Return symbol based on ratio thresholds
+    if ratio < 2:
+        return "●"  # Very consistent
+    elif ratio < 10:
+        return "◆"  # Consistent
+    elif ratio < 100:
+        return "▲"  # Moderate variance
+    elif ratio < 1000:
+        return "■"  # High variance
+    else:
+        return "✕"  # Extreme spikes
+
+
 def calculate_percentile(
     df: pd.DataFrame,
     lane_columns: List[str],

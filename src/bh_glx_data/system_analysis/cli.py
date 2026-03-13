@@ -128,9 +128,9 @@ Lane Specifications:
     )
     stats_parser.add_argument(
         "--statistic",
-        choices=["avg", "min", "max", "high_ber"],
+        choices=["avg", "min", "max", "high_ber", "variance"],
         default="max",
-        help="Statistic to display in heatmap (default: max)",
+        help="Statistic to display in heatmap (variance shows avg with consistency symbols)",
     )
 
     # Threshold command

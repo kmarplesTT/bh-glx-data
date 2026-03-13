@@ -17,6 +17,7 @@ from bh_glx_data.system_analysis.query_engine import (
     ThresholdExceededCounts,
     TrainingFailureCounts,
 )
+from bh_glx_data.system_analysis.statistics import calculate_variance_indicator
 
 logger = logging.getLogger(__name__)
 
@@ -458,15 +459,31 @@ class HeatMapRenderer:
                     value = lane_stat.max_ber
                 elif metric == "avg":
                     value = lane_stat.avg_ber
+                elif metric == "variance":
+                    value = lane_stat.avg_ber  # Use avg for coloring
+                    # Calculate variance indicator for later use
+                    variance_symbol = calculate_variance_indicator(
+                        lane_stat.min_ber,
+                        lane_stat.avg_ber,
+                        lane_stat.max_ber
+                    )
                 else:  # high_ber
                     value = lane_stat.high_ber_count
 
                 key = (bus_id, eth_id)
                 if key not in grouped:
                     grouped[key] = {}
-                grouped[key][lane_num] = value
 
-        title = f"BER Statistics - {metric.upper()} Heatmap"
+                # Store both value and variance symbol if in variance mode
+                if metric == "variance":
+                    grouped[key][lane_num] = (value, variance_symbol)
+                else:
+                    grouped[key][lane_num] = value
+
+        if metric == "variance":
+            title = "BER Statistics - VARIANCE Heatmap (Average with Consistency Indicators)"
+        else:
+            title = f"BER Statistics - {metric.upper()} Heatmap"
         lines = [title, ""]
 
         # Determine if we're showing counts or BER values
@@ -478,7 +495,14 @@ class HeatMapRenderer:
 
             # Render 8 lanes
             for lane_num in range(8):
-                value = lane_values.get(lane_num)
+                lane_data = lane_values.get(lane_num)
+
+                # Handle variance mode (tuple) vs regular mode (single value)
+                if metric == "variance" and lane_data is not None:
+                    value, variance_symbol = lane_data
+                else:
+                    value = lane_data
+                    variance_symbol = None
 
                 if value is None:
                     if is_count_metric:
@@ -501,6 +525,10 @@ class HeatMapRenderer:
                     color = self._get_color_for_value(value, scheme)
                     style = color
 
+                    # Append variance symbol if in variance mode
+                    if variance_symbol:
+                        value_str = f"{value_str} {variance_symbol}"
+
                 # Apply style to output
                 port_line += f"[{style}]{value_str}[/]  "
 
@@ -508,7 +536,13 @@ class HeatMapRenderer:
 
         # Add legend
         lines.append("")
-        lines.append(self._format_ber_legend(scheme))
+        if metric == "variance":
+            # Show both BER color legend and variance legend
+            lines.append(self._format_ber_legend(scheme))
+            lines.append("")
+            lines.append(self._format_variance_legend())
+        else:
+            lines.append(self._format_ber_legend(scheme))
 
         # Add metadata
         speeds_str = ", ".join(str(s) for s in stats.train_speeds) if stats.train_speeds else "all"
@@ -606,3 +640,16 @@ class HeatMapRenderer:
 
         legend_str = "  ".join(legend_parts)
         return legend_str
+
+    def _format_variance_legend(self) -> str:
+        """Format variance indicator legend.
+
+        Returns:
+            Formatted legend string explaining variance symbols
+        """
+        return (
+            "Variance Indicators:\n"
+            "  ●  Very Consistent (max/avg < 2)      ◆  Consistent (2-10)\n"
+            "  ▲  Moderate Variance (10-100)        ■  High Variance (100-1000)\n"
+            "  ✕  Extreme Spikes (≥ 1000)"
+        )
