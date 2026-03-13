@@ -513,7 +513,11 @@ class HeatMapRenderer:
                         style = color
                     else:
                         # For BER metrics, show as missing data
-                        value_str = "  -  "
+                        # 7 chars for regular BER, 9 chars for variance (includes symbol)
+                        if metric == "variance":
+                            value_str = "    -    "  # 9 chars
+                        else:
+                            value_str = "   -   "    # 7 chars
                         style = "dim"
                 elif is_count_metric:
                     # For high_ber counts, use count color scheme
