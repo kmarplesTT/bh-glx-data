@@ -18,7 +18,12 @@ from bh_glx_data.system_analysis.query_engine import (
     ThresholdExceededCounts,
     TrainingFailureCounts,
 )
-from bh_glx_data.system_analysis.visualization import TableRenderer
+from bh_glx_data.system_analysis.visualization import (
+    BER_COLOR_SCHEMES,
+    COUNT_COLOR_SCHEMES,
+    HeatMapRenderer,
+    TableRenderer,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -133,7 +138,8 @@ class AnalysisShell:
         help_text = """
 Available commands:
 
-  stats <lane-spec> [--speed SPEED]           - Show BER statistics
+  stats <lane-spec> [--speed SPEED] [--format FORMAT] [--statistic STAT]
+                                               - Show BER statistics
   threshold <lane-spec> [--speed SPEED]       - Show BER threshold exceeded
   custom <lane-spec> <threshold> [--speed]    - Show custom threshold counts
   training <lane-spec> [--speed SPEED]        - Show training failures
@@ -144,6 +150,16 @@ Available commands:
   history                                      - Show command history
   help                                         - Show this help
   exit                                         - Exit shell
+
+Format options:
+  table         - Table format (default)
+  heatmap       - Heatmap format
+
+Statistic options (for heatmap):
+  max           - Maximum BER (default)
+  avg           - Average BER
+  min           - Minimum BER
+  high_ber      - High BER count (BER >= 0.1)
 
 Export formats:
   excel         - Export last result to Excel
@@ -157,6 +173,7 @@ Lane specifications:
 
 Examples:
   stats all --speed 200
+  stats all --speed 200 --format heatmap --statistic avg
   threshold 01:00.0/ETH07
   custom 01:00.0/* 1e-10 --speed 200
   training all
@@ -171,18 +188,25 @@ Examples:
             args: Command arguments
         """
         if not args:
-            print("Usage: stats <lane-spec> [--speed SPEED]")
+            print("Usage: stats <lane-spec> [--speed SPEED] [--format FORMAT] [--statistic STAT]")
             return
 
         lane_spec = args[0]
         speeds = self._parse_speeds(args[1:])
+        output_format = self._parse_format(args[1:])
+        statistic = self._parse_statistic(args[1:])
 
         try:
             selector = LaneSelector.from_spec(lane_spec)
             result = self.query_engine.query_ber_statistics(selector, train_speeds=speeds)
 
             self.last_result = result
-            print(self.renderer.render_ber_statistics(result))
+
+            if output_format == "heatmap":
+                heatmap_renderer = HeatMapRenderer(ber_color_scheme=BER_COLOR_SCHEMES["default"])
+                print(heatmap_renderer.render_ber_heatmap(result, metric=statistic))
+            else:
+                print(self.renderer.render_ber_statistics(result))
 
         except Exception as e:
             print(f"Error: {e}")
@@ -394,3 +418,37 @@ Examples:
                 i += 1
 
         return speeds if speeds else None
+
+    def _parse_format(self, args: list) -> str:
+        """Parse --format argument from command args.
+
+        Args:
+            args: Command arguments
+
+        Returns:
+            Format string ("table" or "heatmap"), defaults to "table"
+        """
+        i = 0
+        while i < len(args):
+            if args[i] == "--format" and i + 1 < len(args):
+                return args[i + 1]
+            i += 1
+
+        return "table"
+
+    def _parse_statistic(self, args: list) -> str:
+        """Parse --statistic argument from command args.
+
+        Args:
+            args: Command arguments
+
+        Returns:
+            Statistic string ("min", "avg", "max", "high_ber"), defaults to "max"
+        """
+        i = 0
+        while i < len(args):
+            if args[i] == "--statistic" and i + 1 < len(args):
+                return args[i + 1]
+            i += 1
+
+        return "max"

@@ -2,8 +2,21 @@
 
 A database utility for collecting, storing, and analyzing PRBS test data across multiple systems. This tool provides efficient query capabilities with visualization options for identifying serdes lane performance patterns.
 
-**Version:** 0.3.0
+**Version:** 0.4.0
 **Purpose:** Aggregate PRBS test data from CSV files with memory-efficient storage and interactive analysis
+
+---
+
+## What's New in Version 0.4.0
+
+Version 0.4.0 brings significant improvements to BER statistics handling and visualization:
+
+- **High BER Field** - BER values >= 0.1 are now tracked separately in a "High BER" column, providing clearer visibility into severely degraded lanes
+- **Column Order Changed** - Statistics now display in [Min, Avg, Max, High BER] order for better readability
+- **Training Failures Always Excluded** - Training failures are automatically excluded from BER calculations (they don't produce valid BER data)
+- **Heatmap Statistic Selection** - New `--statistic` option allows choosing which statistic to visualize: `avg`, `min`, `max`, or `high_ber` (default: `max`)
+- **Fixed Color Scheme Logic** - Thresholds now work correctly as upper bounds, ensuring consistent color mapping
+- **Enhanced Color Schemes** - All predefined color schemes now include "orange" between yellow and red for better visual gradation
 
 ---
 
@@ -61,10 +74,10 @@ bh-analyze-systems --db /path/to/custom.db <command>
 
 ### Lane Selection
 
-Lanes are specified using a flexible syntax that allows querying specific ports or broad patterns:
+Lanes are specified using a flexible syntax:
 
 - `all` - All lanes on all systems
-- `01:00.0/ETH07` - All 8 lanes on specific port
+- `01:00.0/ETH07` - Specific port, all 8 lanes
 - `01:00.0/*` - All ports on a bus ID
 - `bh-glx-c02u02/01:00.0/ETH07` - Specific system and port
 - `bh-glx-c02u02/*` - All ports on a system
@@ -74,10 +87,12 @@ Lanes are specified using a flexible syntax that allows querying specific ports 
 
 The tool provides several types of queries:
 
-1. **BER Statistics** - Min, max, and average BER values per lane
+1. **BER Statistics** - Min, avg, max, and high BER (>= 0.1) counts per lane
 2. **Threshold Exceeded** - Count of BER_THRESHOLD_EXCEEDED test status occurrences
 3. **Custom Threshold** - Count of lanes exceeding a custom BER threshold
 4. **Training Failures** - Count of TRAINING_FAIL test status occurrences
+
+**Note:** Training failures (TRAINING_FAIL status) are always excluded from BER calculations since they don't produce valid BER data. BER values >= 0.1 are counted separately as "high BER" and excluded from min/avg/max calculations in the BER Statistics query.
 
 ---
 
@@ -134,14 +149,13 @@ bh-analyze-systems ingest ./data/
 #   Database: ~/.local/share/bh-glx-data/analysis.db
 ```
 
-**What It Does:**
+**What it does:**
 
 1. Discovers all CSV files in the input directory
 2. Streams CSV data in chunks (memory efficient)
 3. Filters rows by test_status (includes only specified statuses)
-4. Excludes unnecessary columns (44 columns not needed for analysis)
-5. Batch inserts data into SQLite database
-6. Records ingestion metadata for provenance
+4. Batch inserts data into SQLite database
+5. Records ingestion metadata for provenance
 
 **Notes:**
 
@@ -153,7 +167,7 @@ bh-analyze-systems ingest ./data/
 
 ### stats
 
-Show BER statistics (min, max, avg) for specified lanes.
+Show BER statistics (min, avg, max, high BER) for specified lanes.
 
 ```bash
 bh-analyze-systems stats <lane_spec> [OPTIONS]
@@ -167,8 +181,8 @@ bh-analyze-systems stats <lane_spec> [OPTIONS]
 
 - `--speed SPEED` - Filter by train speed (can be specified multiple times)
 - `--format {table|heatmap}` - Output format (default: table)
+- `--statistic {avg|min|max|high_ber}` - Statistic to display in heatmap (default: max)
 - `--color-scheme SCHEME` - Color scheme for heatmap (default, sensitive, tolerant)
-- `--exclude-training-failures` - Exclude training failures from statistics (default: True)
 
 **Example (Table Format):**
 
@@ -176,31 +190,58 @@ bh-analyze-systems stats <lane_spec> [OPTIONS]
 bh-analyze-systems stats "01:00.0/ETH07" --speed 200
 
 # Output:
-┌─────────────────────┬───────────┬───────────┬───────────┬─────────┐
-│ Lane                │ Min BER   │ Max BER   │ Avg BER   │ Samples │
-├─────────────────────┼───────────┼───────────┼───────────┼─────────┤
-│ 01:00.0/ETH07/lane0 │ 1.23e-12  │ 4.56e-10  │ 2.34e-11  │ 450     │
-│ 01:00.0/ETH07/lane1 │ 8.90e-13  │ 3.21e-10  │ 1.87e-11  │ 450     │
-│ 01:00.0/ETH07/lane2 │ 1.45e-12  │ 5.23e-10  │ 2.89e-11  │ 450     │
-│ 01:00.0/ETH07/lane3 │ 9.87e-13  │ 3.78e-10  │ 2.12e-11  │ 450     │
-└─────────────────────┴───────────┴───────────┴───────────┴─────────┘
+┌─────────────────────┬───────────┬───────────┬───────────┬──────────┬─────────┐
+│ Lane                │ Min       │ Avg       │ Max       │ High BER │ Samples │
+├─────────────────────┼───────────┼───────────┼───────────┼──────────┼─────────┤
+│ 01:00.0/ETH07/lane0 │ 1.23e-12  │ 2.34e-11  │ 4.56e-10  │ 5        │ 450     │
+│ 01:00.0/ETH07/lane1 │ 8.90e-13  │ 1.87e-11  │ 3.21e-10  │ -        │ 450     │
+│ 01:00.0/ETH07/lane2 │ 1.45e-12  │ 2.89e-11  │ 5.23e-10  │ -        │ 450     │
+│ 01:00.0/ETH07/lane3 │ 9.87e-13  │ 2.12e-11  │ 3.78e-10  │ 2        │ 450     │
+└─────────────────────┴───────────┴───────────┴───────────┴──────────┴─────────┘
 
 Tests: 450  Systems: 12  Speeds: 200
 ```
 
+**Column Definitions:**
+
+- **Min** - Minimum BER value (excludes high BER >= 0.1 and training failures)
+- **Avg** - Average BER value (excludes high BER >= 0.1 and training failures)
+- **Max** - Maximum BER value (excludes high BER >= 0.1 and training failures)
+- **High BER** - Count of samples with BER >= 0.1 (shown as "-" if zero)
+- **Samples** - Total number of test samples (includes all tests except training failures)
+
 **Example (Heatmap Format):**
 
 ```bash
+# Display heatmap of maximum BER values (default)
 bh-analyze-systems stats all --speed 200 --format heatmap
+
+# Display heatmap of average BER values
+bh-analyze-systems stats all --speed 200 --format heatmap --statistic avg
+
+# Display heatmap of minimum BER values
+bh-analyze-systems stats all --speed 200 --format heatmap --statistic min
+
+# Display heatmap of high BER counts
+bh-analyze-systems stats all --speed 200 --format heatmap --statistic high_ber
 ```
 
 Displays a color-coded heatmap with BER values across all systems and lanes.
 
+**Heatmap Statistic Options:**
+
+- `max` (default) - Display maximum BER values in heatmap
+- `avg` - Display average BER values in heatmap
+- `min` - Display minimum BER values in heatmap
+- `high_ber` - Display count of high BER (>= 0.1) occurrences in heatmap
+
 **Notes:**
 
-- Training failures (no BER data) are excluded by default
+- Training failures are always excluded from BER calculations (no valid BER data)
+- BER values >= 0.1 are counted as "high BER" and excluded from min/avg/max
 - Multiple speeds can be specified: `--speed 100 --speed 200`
-- Heatmap colors indicate BER levels (green=low, red=high)
+- Heatmap colors indicate BER levels (green=low, yellow=moderate, orange=elevated, red=high)
+- The `--statistic` option only affects heatmap format (table format shows all statistics)
 
 ---
 
@@ -242,7 +283,7 @@ Tests: 1,200  Systems: 24  Speeds: 200
 
 **Use Cases:**
 
-- Identify lanes with frequent BER threshold violations
+- Identify lanes with frequent threshold violations
 - Compare failure rates across systems
 - Detect patterns in failing lanes
 
@@ -517,12 +558,11 @@ The lane selection syntax allows flexible queries across systems, ports, and lan
 
 ### Syntax Patterns
 
-
 | Pattern                | Description                  | Example                       |
 | ---------------------- | ---------------------------- | ----------------------------- |
 | `all`                  | All lanes on all systems     | `all`                         |
 | `BUS_ID/ETH_PORT`      | Specific port, all lanes     | `01:00.0/ETH07`               |
-| `BUS_ID/`*             | All ports on bus ID          | `01:00.0/*`                   |
+| `BUS_ID/*`             | All ports on bus ID          | `01:00.0/*`                   |
 | `HOST/BUS_ID/ETH_PORT` | Specific system and port     | `bh-glx-c02u02/01:00.0/ETH07` |
 | `HOST/*`               | All ports on system          | `bh-glx-c02u02/*`             |
 | `*/ETH_PORT`           | Specific port on all systems | `*/ETH07`                     |
@@ -626,12 +666,24 @@ Heatmaps use configurable color schemes to represent values.
 1. **default** - Gradual color progression
    - Green: 0 failures
    - Yellow: 1-10 failures
-   - Orange: 11-50 failures
+   - Bright Yellow: 11-24 failures
+   - Orange: 25-49 failures
    - Red: 50+ failures
 
-2. **strict** - Binary coloring
+2. **strict** - Low tolerance for failures
    - Green: 0 failures
-   - Red: 1+ failures
+   - Yellow: 1-4 failures
+   - Orange: 5-9 failures
+   - Red: 10+ failures
+
+3. **tolerant** - Higher tolerance for failures
+   - Green: 0 failures
+   - Yellow: 1-19 failures
+   - Bright Yellow: 20-49 failures
+   - Orange: 50-99 failures
+   - Red: 100+ failures
+
+**Threshold Logic:** Colors are assigned based on upper bounds. For example, with the default scheme, a count of 10 shows as yellow (count <= 10), while 11 shows as bright yellow (10 < count <= 24).
 
 **Usage:**
 
@@ -639,8 +691,11 @@ Heatmaps use configurable color schemes to represent values.
 # Use default scheme
 bh-analyze-systems training all --format heatmap
 
-# Use strict scheme (any failure is red)
+# Use strict scheme (low tolerance for failures)
 bh-analyze-systems training all --format heatmap --color-scheme strict
+
+# Use tolerant scheme (higher tolerance)
+bh-analyze-systems training all --format heatmap --color-scheme tolerant
 ```
 
 #### BER Heatmaps (Stats)
@@ -648,35 +703,48 @@ bh-analyze-systems training all --format heatmap --color-scheme strict
 **Built-in Schemes:**
 
 1. **default** - Standard BER thresholds
-   - Green: 0
-   - Yellow: > 1e-12
-   - Orange: > 1e-10
-   - Red: > 1e-8
+   - Green: BER <= 1e-12
+   - Yellow: 1e-12 < BER <= 1e-8
+   - Bright Yellow: 1e-8 < BER <= 1e-7
+   - Orange: 1e-7 < BER <= 5e-7
+   - Red: 5e-7 < BER <= 1e-6
+   - Bright Red: BER > 1e-6
 
-2. **sensitive** - Stricter thresholds
-   - Green: 0
-   - Yellow: > 1e-13
-   - Orange: > 1e-11
-   - Red: > 1e-9
+2. **sensitive** - Stricter thresholds (lower tolerance)
+   - Green: BER <= 1e-12
+   - Yellow: 1e-12 < BER <= 1e-9
+   - Bright Yellow: 1e-9 < BER <= 1e-8
+   - Orange: 1e-8 < BER <= 5e-8
+   - Red: 5e-8 < BER <= 1e-7
+   - Bright Red: BER > 1e-7
 
-3. **tolerant** - Relaxed thresholds
-   - Green: 0
-   - Yellow: > 1e-11
-   - Orange: > 1e-9
-   - Red: > 1e-7
+3. **tolerant** - Relaxed thresholds (higher tolerance)
+   - Green: BER <= 1e-12
+   - Yellow: 1e-12 < BER <= 1e-7
+   - Bright Yellow: 1e-7 < BER <= 1e-6
+   - Orange: 1e-6 < BER <= 5e-6
+   - Red: 5e-6 < BER <= 1e-5
+   - Bright Red: BER > 1e-5
+
+**Threshold Logic:** Colors are assigned based on upper bounds. For example, with the default scheme, BER of 1e-12 shows as green (BER <= 1e-12), while 5e-12 shows as yellow (1e-12 < BER <= 1e-8).
 
 **Usage:**
 
 ```bash
-# Use default scheme
+# Use default scheme with maximum BER statistic (default)
 bh-analyze-systems stats all --format heatmap
 
-# Use sensitive scheme for tighter BER requirements
-bh-analyze-systems stats all --format heatmap --color-scheme sensitive
+# Display average BER with sensitive scheme
+bh-analyze-systems stats all --format heatmap --statistic avg --color-scheme sensitive
 
-# Use tolerant scheme for more relaxed criteria
-bh-analyze-systems stats all --format heatmap --color-scheme tolerant
+# Display minimum BER with tolerant scheme
+bh-analyze-systems stats all --format heatmap --statistic min --color-scheme tolerant
+
+# Display high BER counts (uses count color scheme)
+bh-analyze-systems stats all --format heatmap --statistic high_ber
 ```
+
+**Note:** When `--statistic high_ber` is used, the count color scheme is applied instead of the BER color scheme, since high BER values are displayed as counts rather than BER values.
 
 ---
 
@@ -757,10 +825,10 @@ bh-analyze-systems shell
 
 **Query Commands:**
 
-- `stats <lane-spec> [--speed SPEED]` - BER statistics
-- `threshold <lane-spec> [--speed SPEED]` - Threshold exceeded counts
-- `custom <lane-spec> <threshold> [--speed SPEED]` - Custom threshold counts
-- `training <lane-spec> [--speed SPEED]` - Training failure counts
+- `stats <lane-spec> [--speed SPEED] [--format FORMAT] [--statistic STAT]` - BER statistics
+- `threshold <lane-spec> [--speed SPEED] [--format FORMAT]` - Threshold exceeded counts
+- `custom <lane-spec> <threshold> [--speed SPEED] [--format FORMAT]` - Custom threshold counts
+- `training <lane-spec> [--speed SPEED] [--format FORMAT]` - Training failure counts
 
 **Information Commands:**
 
@@ -770,14 +838,30 @@ bh-analyze-systems shell
 
 **Export Commands:**
 
-- `export csv [--output FILE]` - Export last result to CSV
 - `export excel [--output FILE]` - Export last result to Excel
 - `export excel-db [--output FILE]` - Export full database to Excel
 
 **Utility Commands:**
 
 - `help` - Show available commands
-- `exit` - Exit shell
+- `history` - Show command history
+- `exit` or `quit` - Exit shell
+
+**Example Usage:**
+
+```bash
+bh-analyze> stats all --speed 200
+[displays table format with all statistics]
+
+bh-analyze> stats all --speed 200 --format heatmap
+[displays heatmap of maximum BER values by default]
+
+bh-analyze> stats all --speed 200 --format heatmap --statistic avg
+[displays heatmap of average BER values]
+
+bh-analyze> stats all --speed 200 --format heatmap --statistic high_ber
+[displays heatmap of high BER counts]
+```
 
 ### Shell Features
 
@@ -808,16 +892,18 @@ bh-analyze> info
 bh-analyze> systems
 bh-analyze> speeds
 
-# Run queries
+# Run queries with different statistics
 bh-analyze> stats 01:00.0/ETH07 --speed 200
-bh-analyze> training 01:00.0/* --speed 200
+bh-analyze> stats 01:00.0/ETH07 --speed 200 --format heatmap --statistic max
+bh-analyze> stats 01:00.0/ETH07 --speed 200 --format heatmap --statistic avg
+bh-analyze> training 01:00.0/* --speed 200 --format heatmap
 bh-analyze> custom all 1e-10
 
 # Export results
 bh-analyze> export excel --output my_analysis.xlsx
 
-# Continue exploring
-bh-analyze> stats 05:00.0/ETH00 --speed 200
+# Continue exploring with high BER focus
+bh-analyze> stats all --speed 200 --format heatmap --statistic high_ber
 
 # Exit when done
 bh-analyze> exit
@@ -852,81 +938,21 @@ bh-analyze-systems <command>
 
 ### Config File
 
-Add system analysis configuration to `config.yaml`:
+Add system analysis configuration to `config.yaml` (optional):
 
 ```yaml
 system_analysis:
   database_path: ~/.local/share/bh-glx-data/analysis.db
 
   ingest:
-    chunk_size: 1000  # Rows per batch
+    chunk_size: 1000
     status_filter:
       - PASS
       - BER_THRESHOLD_EXCEEDED
       - TRAINING_FAIL
-
-  visualization:
-    default_format: table  # or "heatmap"
-    heatmap_output: terminal  # or "html" (future)
-
-    # Custom color schemes
-    count_heatmap:
-      default_scheme: default
-      custom_schemes:
-        relaxed:
-          thresholds:
-            - value: 0
-              color: green
-            - value: 5
-              color: yellow
-            - value: 20
-              color: orange
-            - value: 100
-              color: red
-          default_color: red
-
-    ber_heatmap:
-      default_scheme: default
-      custom_schemes:
-        custom:
-          thresholds:
-            - value: 0
-              color: green
-            - value: 1e-11
-              color: yellow
-            - value: 1e-9
-              color: orange
-            - value: 1e-7
-              color: red
-          default_color: red
-
-  export:
-    default_output_dir: ./exports
-    include_metadata: true
-    excel_formatting: true
 ```
 
-### Color Scheme Configuration
-
-Custom color schemes can be defined in `config.yaml` and referenced by name:
-
-```bash
-# Use custom "relaxed" scheme defined in config
-bh-analyze-systems training all --format heatmap --color-scheme relaxed
-```
-
-**Color Values:**
-
-- `green` - Good/passing
-- `yellow` - Warning/marginal
-- `orange` - Concerning
-- `red` - Critical/failing
-
-**Threshold Format:**
-
-- `value` - Numeric threshold
-- `color` - Color for values >= threshold
-- `default_color` - Color for values above all thresholds
+Most users can use the default settings without a config file.
 
 ---
 
@@ -947,7 +973,10 @@ bh-analyze-systems training all --speed 200 --format heatmap
 # 4. Analyze BER for specific port
 bh-analyze-systems stats "01:00.0/ETH07" --speed 200
 
-# 5. Export for sharing
+# 5. Check for high BER occurrences visually
+bh-analyze-systems stats all --speed 200 --format heatmap --statistic high_ber
+
+# 6. Export for sharing
 bh-analyze-systems export-excel --output analysis_summary.xlsx
 ```
 
@@ -977,11 +1006,15 @@ bh-analyze-systems export-excel \
 bh-analyze-systems training all --speed 100 --format heatmap
 bh-analyze-systems training all --speed 200 --format heatmap
 
-# 2. Compare BER statistics
-bh-analyze-systems stats all --speed 100
-bh-analyze-systems stats all --speed 200
+# 2. Compare BER statistics (average values)
+bh-analyze-systems stats all --speed 100 --format heatmap --statistic avg
+bh-analyze-systems stats all --speed 200 --format heatmap --statistic avg
 
-# 3. Export both speeds for side-by-side comparison
+# 3. Compare high BER occurrences
+bh-analyze-systems stats all --speed 100 --format heatmap --statistic high_ber
+bh-analyze-systems stats all --speed 200 --format heatmap --statistic high_ber
+
+# 4. Export both speeds for side-by-side comparison
 bh-analyze-systems export-excel --output speed_100.xlsx --speeds 100
 bh-analyze-systems export-excel --output speed_200.xlsx --speeds 200
 ```
@@ -1010,8 +1043,10 @@ bh-analyze-systems shell
 # Explore interactively
 bh-analyze> info
 bh-analyze> systems
-bh-analyze> training all --speed 200
+bh-analyze> training all --speed 200 --format heatmap
 bh-analyze> stats 01:00.0/ETH07 --speed 200
+bh-analyze> stats all --speed 200 --format heatmap --statistic avg
+bh-analyze> stats all --speed 200 --format heatmap --statistic high_ber
 bh-analyze> custom 01:00.0/* 1e-10
 bh-analyze> export excel --output session_results.xlsx
 bh-analyze> exit
@@ -1104,17 +1139,7 @@ System runs out of memory during large file ingestion.
 
 **Solution:**
 
-The tool uses streaming ingestion to avoid memory issues, but if problems persist:
-
-1. Reduce chunk size in config:
-
-```yaml
-system_analysis:
-  ingest:
-    chunk_size: 500  # Reduce from default 1000
-```
-
-2. Ingest files in smaller batches:
+The tool uses streaming ingestion to avoid memory issues. If problems persist, ingest files in smaller batches:
 
 ```bash
 # Split data into subdirectories and ingest separately
@@ -1174,9 +1199,7 @@ WARNING: Unknown color scheme: custom-scheme. Using default.
 
 **Solution:**
 
-1. Use built-in schemes: `default`, `strict`, `sensitive`, `tolerant`
-2. Define custom scheme in `config.yaml` before using
-3. Check spelling of scheme name
+Use built-in schemes: `default`, `strict`, `sensitive`, `tolerant`. Check spelling of scheme name.
 
 ### Interactive Shell Doesn't Start
 
@@ -1286,5 +1309,5 @@ bh-analyze> help
 
 ---
 
-**Last Updated:** 2026-03-12
-**Tool Version:** 0.3.0
+**Last Updated:** 2026-03-13
+**Tool Version:** 0.4.0

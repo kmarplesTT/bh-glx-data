@@ -18,13 +18,16 @@ def calculate_lane_statistics(
 ) -> Dict[str, Dict[str, float]]:
     """Calculate min/max/avg for specified BER lane columns.
 
+    BER values >= 0.1 are counted separately as "high_ber" and excluded from
+    min/max/avg calculations.
+
     Args:
         df: DataFrame with BER data
         lane_columns: List of lane column names (e.g., ["acc_ber_lane0", ...])
 
     Returns:
         Dictionary mapping lane column name to dict with "min", "max", "avg",
-        "sample_count" keys. NaN/None values are excluded from calculations.
+        "sample_count", "high_ber_count" keys. NaN/None values are excluded from calculations.
 
     Example:
         {
@@ -32,7 +35,8 @@ def calculate_lane_statistics(
                 "min": 1.23e-12,
                 "max": 4.56e-10,
                 "avg": 2.34e-11,
-                "sample_count": 450
+                "sample_count": 450,
+                "high_ber_count": 5
             },
             ...
         }
@@ -48,14 +52,36 @@ def calculate_lane_statistics(
         values = df[lane].dropna()
 
         if values.empty:
-            stats[lane] = {"min": None, "max": None, "avg": None, "sample_count": 0}
-        else:
             stats[lane] = {
-                "min": float(values.min()),
-                "max": float(values.max()),
-                "avg": float(values.mean()),
-                "sample_count": len(values),
+                "min": None,
+                "max": None,
+                "avg": None,
+                "sample_count": 0,
+                "high_ber_count": 0,
             }
+        else:
+            # Separate high BER values (>= 0.1) from normal values
+            high_ber_mask = values >= 0.1
+            high_ber_count = high_ber_mask.sum()
+            normal_values = values[~high_ber_mask]
+
+            if normal_values.empty:
+                # All values are high BER
+                stats[lane] = {
+                    "min": None,
+                    "max": None,
+                    "avg": None,
+                    "sample_count": len(values),
+                    "high_ber_count": int(high_ber_count),
+                }
+            else:
+                stats[lane] = {
+                    "min": float(normal_values.min()),
+                    "max": float(normal_values.max()),
+                    "avg": float(normal_values.mean()),
+                    "sample_count": len(values),
+                    "high_ber_count": int(high_ber_count),
+                }
 
     return stats
 

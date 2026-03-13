@@ -127,10 +127,10 @@ Lane Specifications:
         help="Color scheme name for heatmap (default, sensitive, tolerant)",
     )
     stats_parser.add_argument(
-        "--exclude-training-failures",
-        action="store_true",
-        default=True,
-        help="Exclude training failures from BER statistics (default: True)",
+        "--statistic",
+        choices=["avg", "min", "max", "high_ber"],
+        default="max",
+        help="Statistic to display in heatmap (default: max)",
     )
 
     # Threshold command
@@ -308,7 +308,6 @@ def handle_stats(db: DatabaseManager, args: argparse.Namespace) -> int:
         result = engine.query_ber_statistics(
             selector,
             train_speeds=args.speeds,
-            exclude_training_failures=args.exclude_training_failures,
         )
 
         if args.format == "table":
@@ -318,7 +317,7 @@ def handle_stats(db: DatabaseManager, args: argparse.Namespace) -> int:
         else:  # heatmap
             color_scheme = _get_color_scheme(args.color_scheme, BER_COLOR_SCHEMES)
             renderer = HeatMapRenderer(ber_color_scheme=color_scheme)
-            output = renderer.render_ber_heatmap(result)
+            output = renderer.render_ber_heatmap(result, metric=args.statistic)
             print(output)
 
         return 0

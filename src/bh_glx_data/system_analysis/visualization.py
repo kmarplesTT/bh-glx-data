@@ -21,6 +21,15 @@ from bh_glx_data.system_analysis.query_engine import (
 logger = logging.getLogger(__name__)
 
 
+# ANSI 8-bit color codes for heatmap visualization
+# 5-step color scale: Green → Yellow-Green → Yellow → Orange → Red
+GREEN = "color(46)"           # #00FF00 - Step 1: Excellent/No issues
+YELLOW_GREEN = "color(154)"   # #ADFF2F - Step 2: Good/Minor issues
+YELLOW = "color(226)"         # #FFFF00 - Step 3: Caution/Moderate issues
+ORANGE = "color(214)"         # #FFA500 - Step 4: Warning/Significant issues
+RED = "color(196)"            # #FF0000 - Step 5: Critical/Severe issues
+
+
 @dataclass
 class ColorScheme:
     """Color scheme configuration for heat maps.
@@ -51,32 +60,32 @@ class ColorScheme:
 # Built-in count heatmap color schemes
 COUNT_COLOR_SCHEMES = {
     "default": ColorScheme(
-        thresholds=[(0, "green"), (1, "yellow"), (11, "bright_yellow"), (50, "red")],
-        default_color="bright_red",
+        thresholds=[(0, GREEN), (1, YELLOW_GREEN), (11, YELLOW), (25, ORANGE), (50, RED)],
+        default_color=RED,
     ),
     "strict": ColorScheme(
-        thresholds=[(0, "green"), (1, "red")],
-        default_color="red",
+        thresholds=[(0, GREEN), (1, YELLOW), (5, RED)],
+        default_color=RED,
     ),
     "relaxed": ColorScheme(
-        thresholds=[(0, "green"), (5, "yellow"), (20, "bright_yellow"), (100, "red")],
-        default_color="bright_red",
+        thresholds=[(0, GREEN), (5, YELLOW_GREEN), (20, YELLOW), (50, ORANGE), (100, RED)],
+        default_color=RED,
     ),
 }
 
 # Built-in BER heatmap color schemes
 BER_COLOR_SCHEMES = {
     "default": ColorScheme(
-        thresholds=[(1e-8, "green"), (1e-7, "yellow"), (5e-7, "bright_yellow"), (1e-6, "red")],
-        default_color="bright_red",
+        thresholds=[(1e-8, GREEN), (5e-8, YELLOW_GREEN), (1e-7, YELLOW), (5e-7, ORANGE), (1e-6, RED)],
+        default_color=RED,
     ),
     "sensitive": ColorScheme(
-        thresholds=[(1e-9, "green"), (1e-8, "yellow"), (5e-8, "bright_yellow"), (1e-7, "red")],
-        default_color="bright_red",
+        thresholds=[(1e-9, GREEN), (5e-9, YELLOW_GREEN), (1e-8, YELLOW), (5e-8, ORANGE), (1e-7, RED)],
+        default_color=RED,
     ),
     "tolerant": ColorScheme(
-        thresholds=[(1e-7, "green"), (1e-6, "yellow"), (5e-6, "bright_yellow"), (1e-5, "red")],
-        default_color="bright_red",
+        thresholds=[(1e-6, GREEN), (5e-6, YELLOW_GREEN), (1e-5, YELLOW), (5e-5, ORANGE), (1e-4, RED)],
+        default_color=RED,
     ),
 }
 
@@ -101,25 +110,54 @@ class TableRenderer:
 
         table.add_column("Lane", style="dim")
         table.add_column("Min BER", justify="right")
-        table.add_column("Max BER", justify="right")
         table.add_column("Avg BER", justify="right")
+        table.add_column("Max BER", justify="right")
+        table.add_column("High BER", justify="right", style="red")
         table.add_column("Samples", justify="right", style="green")
 
-        # Sort lane IDs for consistent output
-        for lane_id in sorted(stats.lane_stats.keys()):
-            lane_stat = stats.lane_stats[lane_id]
+        # Group lanes by bus_id and eth_id for proper sectioning
+        grouped_lanes = self._group_lanes_by_bus_and_eth(stats.lane_stats.keys())
 
-            min_ber_str = self._format_ber(lane_stat.min_ber)
-            max_ber_str = self._format_ber(lane_stat.max_ber)
-            avg_ber_str = self._format_ber(lane_stat.avg_ber)
+        prev_bus_id = None
+        for bus_id in sorted(grouped_lanes.keys()):
+            # Add thick separator (double line) between different bus_ids
+            if prev_bus_id is not None:
+                # Add an empty row styled as a separator for thick line effect
+                table.add_row("", "", "", "", "", "", end_section=True)
 
-            table.add_row(
-                lane_id,
-                min_ber_str,
-                max_ber_str,
-                avg_ber_str,
-                str(lane_stat.sample_count),
-            )
+            prev_eth_id = None
+            for eth_id in sorted(grouped_lanes[bus_id].keys()):
+                # Add thin separator between different eth_ids within same bus_id
+                if prev_eth_id is not None:
+                    # Mark end of previous eth_id section with a line
+                    pass  # The previous row already has end_section=True
+
+                # Add all lanes for this eth_id
+                lane_ids = sorted(grouped_lanes[bus_id][eth_id])
+                for i, lane_id in enumerate(lane_ids):
+                    lane_stat = stats.lane_stats[lane_id]
+
+                    min_ber_str = self._format_ber(lane_stat.min_ber)
+                    avg_ber_str = self._format_ber(lane_stat.avg_ber)
+                    max_ber_str = self._format_ber(lane_stat.max_ber)
+                    high_ber_str = str(lane_stat.high_ber_count) if lane_stat.high_ber_count > 0 else "-"
+
+                    # Add separator line after last lane of each eth_id group
+                    is_last_in_eth = (i == len(lane_ids) - 1)
+
+                    table.add_row(
+                        lane_id,
+                        min_ber_str,
+                        avg_ber_str,
+                        max_ber_str,
+                        high_ber_str,
+                        str(lane_stat.sample_count),
+                        end_section=is_last_in_eth,
+                    )
+
+                prev_eth_id = eth_id
+
+            prev_bus_id = bus_id
 
         # Add footer with metadata
         speeds_str = ", ".join(str(s) for s in stats.train_speeds) if stats.train_speeds else "all"
@@ -163,10 +201,36 @@ class TableRenderer:
         table.add_column("Lane", style="dim")
         table.add_column("Count", justify="right", style="yellow")
 
-        # Sort lane IDs
-        for lane_id in sorted(counts.lane_counts.keys()):
-            count = counts.lane_counts[lane_id]
-            table.add_row(lane_id, str(count))
+        # Group lanes by bus_id and eth_id for proper sectioning
+        grouped_lanes = self._group_lanes_by_bus_and_eth(counts.lane_counts.keys())
+
+        prev_bus_id = None
+        for bus_id in sorted(grouped_lanes.keys()):
+            # Add thick separator (double line) between different bus_ids
+            if prev_bus_id is not None:
+                # Add an empty row styled as a separator for thick line effect
+                table.add_row("", "", end_section=True)
+
+            prev_eth_id = None
+            for eth_id in sorted(grouped_lanes[bus_id].keys()):
+                # Add thin separator between different eth_ids within same bus_id
+                if prev_eth_id is not None:
+                    # Mark end of previous eth_id section with a line
+                    pass  # The previous row already has end_section=True
+
+                # Add all lanes for this eth_id
+                lane_ids = sorted(grouped_lanes[bus_id][eth_id])
+                for i, lane_id in enumerate(lane_ids):
+                    count = counts.lane_counts[lane_id]
+
+                    # Add separator line after last lane of each eth_id group
+                    is_last_in_eth = (i == len(lane_ids) - 1)
+
+                    table.add_row(lane_id, str(count), end_section=is_last_in_eth)
+
+                prev_eth_id = eth_id
+
+            prev_bus_id = bus_id
 
         # Add footer
         speeds_str = ", ".join(str(s) for s in counts.train_speeds) if counts.train_speeds else "all"
@@ -182,6 +246,31 @@ class TableRenderer:
             self.console.print(footer, style="dim")
 
         return capture.get()
+
+    def _group_lanes_by_bus_and_eth(self, lane_ids) -> dict:
+        """Group lane IDs by bus_id and eth_id.
+
+        Args:
+            lane_ids: Iterable of lane ID strings (format: "bus_id/eth_id/laneN")
+
+        Returns:
+            Nested dict: {bus_id: {eth_id: [lane_ids]}}
+        """
+        grouped = {}
+        for lane_id in lane_ids:
+            parts = lane_id.split("/")
+            if len(parts) >= 3:
+                bus_id = parts[0]
+                eth_id = parts[1]
+
+                if bus_id not in grouped:
+                    grouped[bus_id] = {}
+                if eth_id not in grouped[bus_id]:
+                    grouped[bus_id][eth_id] = []
+
+                grouped[bus_id][eth_id].append(lane_id)
+
+        return grouped
 
     def _format_ber(self, value: Optional[float]) -> str:
         """Format BER value for display.
@@ -244,14 +333,14 @@ class HeatMapRenderer:
     def render_ber_heatmap(
         self,
         stats: BERStatistics,
-        metric: str = "avg",
+        metric: str = "max",
         color_scheme: Optional[ColorScheme] = None,
     ) -> str:
         """Render BER statistics as heat map.
 
         Args:
             stats: BER statistics to visualize
-            metric: "min", "max", or "avg"
+            metric: "min", "max", "avg", or "high_ber"
             color_scheme: Override instance color scheme
 
         Returns:
@@ -314,7 +403,7 @@ class HeatMapRenderer:
                 color = self._get_color_for_value(count, scheme)
 
                 # Format count value
-                count_str = f"{count:3d}" if count < 1000 else "999+"
+                count_str = f"{count:4d}" if count < 1000 else "999+"
 
                 # Add colored value
                 port_line += f"[{color}]{count_str}[/]  "
@@ -347,7 +436,7 @@ class HeatMapRenderer:
 
         Args:
             stats: BER statistics
-            metric: "min", "max", or "avg"
+            metric: "min", "max", "avg", or "high_ber"
             scheme: Color scheme to use
 
         Returns:
@@ -367,8 +456,10 @@ class HeatMapRenderer:
                     value = lane_stat.min_ber
                 elif metric == "max":
                     value = lane_stat.max_ber
-                else:  # avg
+                elif metric == "avg":
                     value = lane_stat.avg_ber
+                else:  # high_ber
+                    value = lane_stat.high_ber_count
 
                 key = (bus_id, eth_id)
                 if key not in grouped:
@@ -377,6 +468,9 @@ class HeatMapRenderer:
 
         title = f"BER Statistics - {metric.upper()} Heatmap"
         lines = [title, ""]
+
+        # Determine if we're showing counts or BER values
+        is_count_metric = (metric == "high_ber")
 
         # Render each port
         for (bus_id, eth_id), lane_values in sorted(grouped.items()):
@@ -387,13 +481,28 @@ class HeatMapRenderer:
                 value = lane_values.get(lane_num)
 
                 if value is None:
-                    value_str = "  -  "
-                    color = "dim"
+                    if is_count_metric:
+                        # Treat None as 0 for count metrics and use same color scheme
+                        value_str = "   0"
+                        color = self._get_color_for_value(0, self.count_colors)
+                        style = color
+                    else:
+                        # For BER metrics, show as missing data
+                        value_str = "  -  "
+                        style = "dim"
+                elif is_count_metric:
+                    # For high_ber counts, use count color scheme
+                    value_str = f"{int(value):4d}" if value < 1000 else "999+"
+                    color = self._get_color_for_value(value, scheme)
+                    style = color
                 else:
+                    # For BER values
                     value_str = f"{value:.1e}"
                     color = self._get_color_for_value(value, scheme)
+                    style = color
 
-                port_line += f"[{color}]{value_str}[/]  "
+                # Apply style to output
+                port_line += f"[{style}]{value_str}[/]  "
 
             lines.append(port_line)
 
@@ -420,6 +529,14 @@ class HeatMapRenderer:
     ) -> str:
         """Determine color for a value based on threshold ranges.
 
+        Thresholds define upper bounds (exclusive). For example:
+        thresholds=[(1e-12, "green"), (1e-7, "yellow"), (1e-6, "bright_yellow")]
+        means:
+        - value <= 1e-12: green
+        - 1e-12 < value <= 1e-7: yellow
+        - 1e-7 < value <= 1e-6: bright_yellow
+        - value > 1e-6: default_color
+
         Args:
             value: Value to color
             color_scheme: Color scheme with thresholds
@@ -427,15 +544,16 @@ class HeatMapRenderer:
         Returns:
             Rich color name
         """
+        # Sort thresholds in ascending order
+        sorted_thresholds = sorted(color_scheme.thresholds)
+
         # Find appropriate color based on thresholds
-        color = color_scheme.default_color
+        for threshold, threshold_color in sorted_thresholds:
+            if value <= threshold:
+                return threshold_color
 
-        for threshold, threshold_color in sorted(color_scheme.thresholds, reverse=True):
-            if value >= threshold:
-                color = threshold_color
-                break
-
-        return color
+        # Value exceeds all thresholds
+        return color_scheme.default_color
 
     def _format_count_legend(self, scheme: ColorScheme) -> str:
         """Format legend for count heatmap.
@@ -463,7 +581,8 @@ class HeatMapRenderer:
             last_threshold = sorted_thresholds[-1][0]
             legend_parts.append(f"[{scheme.default_color}]> {last_threshold}[/]")
 
-        return "  ".join(legend_parts)
+        legend_str = "  ".join(legend_parts)
+        return legend_str
 
     def _format_ber_legend(self, scheme: ColorScheme) -> str:
         """Format legend for BER heatmap.
@@ -485,4 +604,5 @@ class HeatMapRenderer:
             else:
                 legend_parts.append(f"[{color}]> {threshold:.0e}[/]")
 
-        return "  ".join(legend_parts)
+        legend_str = "  ".join(legend_parts)
+        return legend_str

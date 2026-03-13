@@ -395,23 +395,23 @@ class CSVIngester:
 
                 # Create TestRecord
                 record = TestRecord(
-                    host=str(row["host"]) if "host" in row else "",
-                    bus_id=str(row["bus_id"]) if "bus_id" in row else "",
-                    eth_id=str(row["eth_id"]) if "eth_id" in row else "",
-                    date=str(row["date"]) if "date" in row else "",
-                    test_status=str(row["test_status"]),
+                    host=str(row["host"]).strip('"') if "host" in row else "",
+                    bus_id=str(row["bus_id"]).strip('"') if "bus_id" in row else "",
+                    eth_id=str(row["eth_id"]).strip('"') if "eth_id" in row else "",
+                    date=str(row["date"]).strip('"') if "date" in row else "",
+                    test_status=str(row["test_status"]).strip('"'),
                     train_speed=int(row["train_speed"]) if "train_speed" in row else 0,
                     acc_ber_lanes=ber_lanes,
-                    interface_id=str(row["interface_id"])
+                    interface_id=str(row["interface_id"]).strip('"')
                     if "interface_id" in row and not pd.isna(row["interface_id"])
                     else None,
-                    train_type_requested=str(row["train_type_requested"])
+                    train_type_requested=str(row["train_type_requested"]).strip('"')
                     if "train_type_requested" in row and not pd.isna(row["train_type_requested"])
                     else None,
-                    train_mode=str(row["train_mode"])
+                    train_mode=str(row["train_mode"]).strip('"')
                     if "train_mode" in row and not pd.isna(row["train_mode"])
                     else None,
-                    port_type=str(row["port_type"])
+                    port_type=str(row["port_type"]).strip('"')
                     if "port_type" in row and not pd.isna(row["port_type"])
                     else None,
                     acc_lane_error_cnt=error_cnt,
@@ -422,7 +422,7 @@ class CSVIngester:
                     ber_threshold_used=float(row["ber_threshold_used"])
                     if "ber_threshold_used" in row and not pd.isna(row["ber_threshold_used"])
                     else None,
-                    interface_type_used=str(row["interface_type_used"])
+                    interface_type_used=str(row["interface_type_used"]).strip('"')
                     if "interface_type_used" in row and not pd.isna(row["interface_type_used"])
                     else None,
                     source_file=source_file,

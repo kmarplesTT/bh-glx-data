@@ -3,6 +3,7 @@
 ## Problem Statement
 
 Current BER heatmaps in `bh-analyze-systems` show only ONE metric at a time (min, max, or avg), making it difficult to identify:
+
 1. **Consistently high BER lanes** (high average, low variance)
 2. **Occasionally high BER lanes** (low average, but high max - indicating spikes)
 
@@ -11,6 +12,7 @@ Users must run multiple commands or switch to table format to see all three metr
 ## Proposed Solution: Dual-Indicator Heatmap
 
 Show **both magnitude and consistency** in a single heatmap by combining:
+
 1. **Primary value & color**: Average BER (colored using existing schemes)
 2. **Variance symbol**: Visual indicator of the spread between min/max
 3. **Compact format**: One line per port, eight lanes per line
@@ -56,12 +58,14 @@ Interactive Detail View (optional enhancement):
 ### Interpretation Guide
 
 **Color coding** (with ANSI colors in terminal):
+
 - 🟢 Green values: Good BER (< 1e-8)
 - 🟡 Yellow values: Marginal BER (1e-8 to 1e-7)
-- 🟠 Orange values: Poor BER (1e-7 to 5e-7)
-- 🔴 Red values: Bad BER (≥ 5e-7)
+- 🟠 Orange values: Poor BER (1e-7 to 1e-6)
+- 🔴 Red values: Bad BER (≥ 1e-6)
 
 **Reading the heatmap:**
+
 - `1.2e-12 ●` (green) = Consistently excellent BER
 - `2.3e-11 ◆` (green) = Consistently good BER with minor variation
 - `1.5e-10 ▲` (yellow) = Marginal average with moderate spikes
@@ -71,6 +75,7 @@ Interactive Detail View (optional enhancement):
 - `1.2e-06 ■` (red) = Bad average with high variance (very problematic)
 
 **Key diagnostic patterns:**
+
 - Green/Yellow ● ◆ = Healthy, stable lanes
 - Orange/Red ● ◆ = Persistent issues (requires hardware investigation)
 - Any ✕ symbol = Investigate for intermittent issues (cable, power, temperature)
@@ -83,6 +88,7 @@ Interactive Detail View (optional enhancement):
 **File**: `src/bh_glx_data/system_analysis/statistics.py`
 
 Add variance calculation helper:
+
 ```python
 def calculate_variance_indicator(min_ber: float, avg_ber: float, max_ber: float) -> str:
     """Calculate variance indicator symbol based on max/avg ratio."""
@@ -114,6 +120,7 @@ def calculate_variance_indicator(min_ber: float, avg_ber: float, max_ber: float)
    - New: Also accept `metric="combined"` or `metric="variance"`
 
 2. **Create new rendering method**:
+
    ```python
    def _render_terminal_ber_variance_heatmap(
        self,
@@ -140,6 +147,7 @@ def calculate_variance_indicator(min_ber: float, avg_ber: float, max_ber: float)
 **File**: `src/bh_glx_data/system_analysis/cli.py`
 
 **Option 1**: Add new `--metric` argument:
+
 ```python
 stats_parser.add_argument(
     "--metric",
@@ -150,6 +158,7 @@ stats_parser.add_argument(
 ```
 
 **Option 2**: Add new `--show-variance` flag (simpler, recommended):
+
 ```python
 stats_parser.add_argument(
     "--show-variance",
@@ -159,6 +168,7 @@ stats_parser.add_argument(
 ```
 
 Update handler to pass through to renderer:
+
 ```python
 if args.format == "heatmap":
     metric = "combined" if args.show_variance else "avg"
@@ -171,6 +181,7 @@ if args.format == "heatmap":
 **New test file**: `tests/unit/test_variance_visualization.py`
 
 Test cases:
+
 1. `test_variance_indicator_calculation()` - All 5 variance levels
 2. `test_variance_heatmap_rendering()` - Format and spacing
 3. `test_variance_legend_generation()` - Legend content
@@ -182,6 +193,7 @@ Test cases:
 **Update**: `docs/user_guides/bh-analyze-systems.md`
 
 Add section:
+
 - "Understanding BER Variance Indicators"
 - Example commands with `--show-variance`
 - Interpretation guide with diagnostic patterns
@@ -256,12 +268,14 @@ bh-analyze-systems stats all --format table
 ### Trade-offs
 
 **Pros:**
+
 - Compact representation
 - Clear diagnostic value
 - Easy to learn (5 symbols)
 - Works in all terminals
 
 **Cons:**
+
 - Requires legend reference initially
 - Some symbols may not render in all terminals (fallback to ASCII)
 - Max/avg ratio may not capture all variance patterns (e.g., bimodal distributions)

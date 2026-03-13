@@ -12,6 +12,7 @@ from typing import Dict, List, Optional, Tuple
 import pandas as pd
 
 from bh_glx_data.core.exceptions import LaneSelectorError, QueryError
+from bh_glx_data.hardware.platform_topology import normalize_bus_id, normalize_eth_port
 from bh_glx_data.system_analysis.database import DatabaseManager
 from bh_glx_data.system_analysis.statistics import (
     calculate_lane_statistics,
@@ -28,10 +29,11 @@ class LaneBERStats:
 
     Attributes:
         lane_id: Lane identifier (e.g., "01:00.0/ETH07/lane0")
-        min_ber: Minimum BER value
-        max_ber: Maximum BER value
-        avg_ber: Average BER value
+        min_ber: Minimum BER value (excluding high BER >= 0.1)
+        max_ber: Maximum BER value (excluding high BER >= 0.1)
+        avg_ber: Average BER value (excluding high BER >= 0.1)
         sample_count: Number of samples
+        high_ber_count: Number of samples with BER >= 0.1
     """
 
     lane_id: str
@@ -39,6 +41,7 @@ class LaneBERStats:
     max_ber: Optional[float]
     avg_ber: Optional[float]
     sample_count: int
+    high_ber_count: int
 
 
 @dataclass
@@ -127,43 +130,43 @@ class LaneSelector:
 
     Attributes:
         spec: Original specification string
-        host_pattern: Host filter (None = all hosts, "*" = wildcard, specific hostname)
-        bus_id_pattern: Bus ID filter (None = all, "*" = wildcard, specific bus_id)
-        eth_id_pattern: Ethernet port filter (None = all, "*" = wildcard, specific eth_id)
+        host: Host filter (None = all hosts, "*" = wildcard, specific hostname)
+        bus_id: Bus ID filter (None = all, "*" = wildcard, specific bus_id)
+        eth_id: Ethernet port filter (None = all, "*" = wildcard, specific eth_id)
     """
 
     def __init__(
         self,
-        host_pattern: Optional[str] = None,
-        bus_id_pattern: Optional[str] = None,
-        eth_id_pattern: Optional[str] = None,
+        host: Optional[str] = None,
+        bus_id: Optional[str] = None,
+        eth_id: Optional[str] = None,
     ):
         """Initialize lane selector.
 
         Args:
-            host_pattern: Host filter pattern
-            bus_id_pattern: Bus ID filter pattern
-            eth_id_pattern: Ethernet port filter pattern
+            host: Host filter pattern
+            bus_id: Bus ID filter pattern
+            eth_id: Ethernet port filter pattern
         """
-        self.host_pattern = host_pattern
-        self.bus_id_pattern = bus_id_pattern
-        self.eth_id_pattern = eth_id_pattern
+        self.host = host
+        self.bus_id = bus_id
+        self.eth_id = eth_id
         self.spec = self._build_spec()
 
     def _build_spec(self) -> str:
         """Build specification string from patterns."""
         parts = []
 
-        if self.host_pattern and self.host_pattern != "*":
-            parts.append(self.host_pattern)
+        if self.host and self.host != "*":
+            parts.append(self.host)
 
-        if self.bus_id_pattern and self.bus_id_pattern != "*":
-            parts.append(self.bus_id_pattern)
-        elif self.host_pattern or self.bus_id_pattern:
+        if self.bus_id and self.bus_id != "*":
+            parts.append(self.bus_id)
+        elif self.host or self.bus_id:
             parts.append("*")
 
-        if self.eth_id_pattern and self.eth_id_pattern != "*":
-            parts.append(self.eth_id_pattern)
+        if self.eth_id and self.eth_id != "*":
+            parts.append(self.eth_id)
         elif parts:
             parts.append("*")
 
@@ -192,25 +195,39 @@ class LaneSelector:
         """
         spec = spec.strip()
 
+        # Validate not empty
+        if not spec:
+            raise LaneSelectorError("Lane specification cannot be empty", spec=spec)
+
         # Handle "all" special case
         if spec.lower() == "all":
-            return cls(host_pattern=None, bus_id_pattern=None, eth_id_pattern=None)
+            return cls(host=None, bus_id=None, eth_id=None)
 
-        # Split by "/"
+        # Split by "/" and validate
         parts = spec.split("/")
+
+        # Check for empty parts (e.g., "//", "/foo", "foo/")
+        if any(not part for part in parts):
+            raise LaneSelectorError(f"Invalid lane specification format: {spec}", spec=spec)
 
         if len(parts) == 1:
             # Could be just host or just bus_id
             part = parts[0]
+
+            # Wildcard-only is invalid
             if part == "*":
-                return cls(host_pattern=None, bus_id_pattern=None, eth_id_pattern=None)
+                raise LaneSelectorError("Wildcard-only specification is invalid. Use 'all' instead.", spec=spec)
 
             # Check if it looks like a bus_id (contains ":")
             if ":" in part:
-                return cls(host_pattern=None, bus_id_pattern=part, eth_id_pattern=None)
+                try:
+                    normalized_bus_id = normalize_bus_id(part)
+                    return cls(host=None, bus_id=normalized_bus_id, eth_id=None)
+                except Exception as e:
+                    raise LaneSelectorError(f"Invalid bus_id format: {part}", spec=spec) from e
             else:
                 # Assume it's a hostname
-                return cls(host_pattern=part, bus_id_pattern=None, eth_id_pattern=None)
+                return cls(host=part, bus_id=None, eth_id=None)
 
         elif len(parts) == 2:
             # Could be bus_id/eth_id or host/bus_id
@@ -218,20 +235,66 @@ class LaneSelector:
 
             # If first contains ":", it's bus_id/eth_id
             if ":" in first:
-                return cls(host_pattern=None, bus_id_pattern=first, eth_id_pattern=second)
+                try:
+                    normalized_bus_id = normalize_bus_id(first)
+                except Exception as e:
+                    raise LaneSelectorError(f"Invalid bus_id format: {first}", spec=spec) from e
+
+                # Normalize eth_id if not wildcard
+                if second != "*":
+                    try:
+                        normalized_eth_id = normalize_eth_port(second)
+                    except Exception as e:
+                        raise LaneSelectorError(f"Invalid eth_id format: {second}", spec=spec) from e
+                else:
+                    normalized_eth_id = None
+
+                return cls(host=None, bus_id=normalized_bus_id, eth_id=normalized_eth_id)
             else:
                 # Otherwise it's host/bus_id or host/eth_id
                 # If second contains ":", it's host/bus_id
                 if ":" in second:
-                    return cls(host_pattern=first, bus_id_pattern=second, eth_id_pattern=None)
+                    try:
+                        normalized_bus_id = normalize_bus_id(second)
+                        return cls(host=first, bus_id=normalized_bus_id, eth_id=None)
+                    except Exception as e:
+                        raise LaneSelectorError(f"Invalid bus_id format: {second}", spec=spec) from e
                 else:
-                    # It's host/eth_id
-                    return cls(host_pattern=first, bus_id_pattern=None, eth_id_pattern=second)
+                    # It's host/eth_id - wildcard or actual eth port
+                    if second != "*":
+                        # It's a specific eth_id
+                        try:
+                            normalized_eth_id = normalize_eth_port(second)
+                            return cls(host=first, bus_id=None, eth_id=normalized_eth_id)
+                        except Exception as e:
+                            raise LaneSelectorError(f"Invalid eth_id format: {second}", spec=spec) from e
+                    else:
+                        # It's host/*
+                        return cls(host=first, bus_id=None, eth_id=None)
 
         elif len(parts) == 3:
             # host/bus_id/eth_id
             host, bus_id, eth_id = parts
-            return cls(host_pattern=host, bus_id_pattern=bus_id, eth_id_pattern=eth_id)
+
+            # Normalize bus_id if not wildcard
+            if bus_id != "*":
+                try:
+                    normalized_bus_id = normalize_bus_id(bus_id)
+                except Exception as e:
+                    raise LaneSelectorError(f"Invalid bus_id format: {bus_id}", spec=spec) from e
+            else:
+                normalized_bus_id = None
+
+            # Normalize eth_id if not wildcard
+            if eth_id != "*":
+                try:
+                    normalized_eth_id = normalize_eth_port(eth_id)
+                except Exception as e:
+                    raise LaneSelectorError(f"Invalid eth_id format: {eth_id}", spec=spec) from e
+            else:
+                normalized_eth_id = None
+
+            return cls(host=host if host != "*" else None, bus_id=normalized_bus_id, eth_id=normalized_eth_id)
 
         else:
             raise LaneSelectorError(f"Invalid lane specification format: {spec}", spec=spec)
@@ -249,19 +312,19 @@ class LaneSelector:
         params = []
 
         # Host filter
-        if self.host_pattern and self.host_pattern != "*":
+        if self.host and self.host != "*":
             conditions.append("host = ?")
-            params.append(self.host_pattern)
+            params.append(self.host)
 
         # Bus ID filter
-        if self.bus_id_pattern and self.bus_id_pattern != "*":
+        if self.bus_id and self.bus_id != "*":
             conditions.append("bus_id = ?")
-            params.append(self.bus_id_pattern)
+            params.append(self.bus_id)
 
         # Eth ID filter
-        if self.eth_id_pattern and self.eth_id_pattern != "*":
+        if self.eth_id and self.eth_id != "*":
             conditions.append("eth_id = ?")
-            params.append(self.eth_id_pattern)
+            params.append(self.eth_id)
 
         if conditions:
             where_clause = " AND ".join(conditions)
@@ -273,6 +336,21 @@ class LaneSelector:
     def __str__(self) -> str:
         """String representation."""
         return self.spec
+
+    def __repr__(self) -> str:
+        """Detailed representation."""
+        parts = []
+        if self.host:
+            parts.append(f"host={self.host}")
+        if self.bus_id:
+            parts.append(f"bus_id={self.bus_id}")
+        if self.eth_id:
+            parts.append(f"eth_id={self.eth_id}")
+
+        if parts:
+            return f"LaneSelector({', '.join(parts)})"
+        else:
+            return "LaneSelector(all)"
 
 
 class QueryEngine:
@@ -309,14 +387,15 @@ class QueryEngine:
         self,
         lane_selector: LaneSelector,
         train_speeds: Optional[List[int]] = None,
-        exclude_training_failures: bool = True,
     ) -> BERStatistics:
         """Calculate BER statistics for specified lanes.
+
+        Training failures are always excluded from BER statistics since they
+        do not have valid BER data.
 
         Args:
             lane_selector: Specifies which lanes to analyze
             train_speeds: Filter by specific speeds (None = all)
-            exclude_training_failures: Exclude rows with test_status=TRAINING_FAIL
 
         Returns:
             BERStatistics with per-lane stats and metadata
@@ -334,9 +413,8 @@ class QueryEngine:
                 where_clause += f" AND train_speed IN ({speed_placeholders})"
                 params = params + tuple(train_speeds)
 
-            # Exclude training failures (no BER data)
-            if exclude_training_failures:
-                where_clause += " AND test_status != 'TRAINING_FAIL'"
+            # Always exclude training failures (no BER data)
+            where_clause += " AND test_status != 'TRAINING_FAIL'"
 
             query = f"SELECT * FROM prbs_tests WHERE {where_clause}"
 
@@ -369,13 +447,30 @@ class QueryEngine:
                     lane_values = group[lane_col].dropna()
 
                     if not lane_values.empty:
-                        lane_stats[lane_id] = LaneBERStats(
-                            lane_id=lane_id,
-                            min_ber=float(lane_values.min()),
-                            max_ber=float(lane_values.max()),
-                            avg_ber=float(lane_values.mean()),
-                            sample_count=len(lane_values),
-                        )
+                        # Separate high BER values (>= 0.1) from normal values
+                        high_ber_mask = lane_values >= 0.1
+                        high_ber_count = high_ber_mask.sum()
+                        normal_values = lane_values[~high_ber_mask]
+
+                        if normal_values.empty:
+                            # All values are high BER
+                            lane_stats[lane_id] = LaneBERStats(
+                                lane_id=lane_id,
+                                min_ber=None,
+                                max_ber=None,
+                                avg_ber=None,
+                                sample_count=len(lane_values),
+                                high_ber_count=int(high_ber_count),
+                            )
+                        else:
+                            lane_stats[lane_id] = LaneBERStats(
+                                lane_id=lane_id,
+                                min_ber=float(normal_values.min()),
+                                max_ber=float(normal_values.max()),
+                                avg_ber=float(normal_values.mean()),
+                                sample_count=len(lane_values),
+                                high_ber_count=int(high_ber_count),
+                            )
 
             # Metadata
             num_tests = len(df)
