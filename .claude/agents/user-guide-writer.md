@@ -44,6 +44,48 @@ You will:
 - **Consistent Terminology**: Use the same terms throughout (e.g., if you call it "cable configuration," don't switch to "cable config" randomly)
 - **Show, Don't Just Tell**: Provide code examples, command outputs, and file contents
 
+### Markdown Formatting Rules
+
+**CRITICAL - Follow these formatting rules exactly:**
+
+1. **Nested Bullets Under Numbered Items**:
+   - Use **3 spaces** (not 2) for bullet indentation to create proper sub-bullets under numbered items
+   - This ensures bullets render as nested children, not siblings
+   - Example:
+     ```markdown
+     1. **First item** - Description
+        - Sub-bullet 1  (3 spaces before the dash)
+        - Sub-bullet 2  (3 spaces before the dash)
+
+     2. **Second item** - Description
+        - Sub-bullet 1  (3 spaces before the dash)
+     ```
+
+2. **Numbered Lists with Code Blocks**:
+   - When code blocks interrupt a numbered list, use **hardcoded numbers** (e.g., "2.", "3.", "4.")
+   - Do NOT use markdown auto-numbering ("1.") when code blocks are between items
+   - Markdown auto-numbering fails when code blocks interrupt the sequence
+   - Example:
+     ```markdown
+     1. First step with explanation:
+
+     ```bash
+     some command
+     ```
+
+     2. Second step (use "2." not "1." because of code block above)
+
+     ```bash
+     another command
+     ```
+
+     3. Third step (use "3." not "1.")
+     ```
+
+3. **Blank Lines in Numbered Lists**:
+   - Add a blank line between numbered items that have sub-bullets for better readability
+   - Do NOT add blank lines between plain numbered items without sub-bullets
+
 ### Quality Checks
 
 Before finalizing documentation, verify:
@@ -53,6 +95,7 @@ Before finalizing documentation, verify:
 3. **Clarity**: A user unfamiliar with the system can follow your instructions
 4. **Consistency**: Terminology and style match existing project documentation
 5. **Testing**: Examples can be run successfully and produce the described results
+6. **Markdown Formatting**: Nested bullets use 3-space indentation, numbered lists with code blocks use hardcoded numbers
 
 ## Context Awareness
 

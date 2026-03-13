@@ -517,14 +517,16 @@ The lane selection syntax allows flexible queries across systems, ports, and lan
 
 ### Syntax Patterns
 
-| Pattern | Description | Example |
-|---------|-------------|---------|
-| `all` | All lanes on all systems | `all` |
-| `BUS_ID/ETH_PORT` | Specific port, all lanes | `01:00.0/ETH07` |
-| `BUS_ID/*` | All ports on bus ID | `01:00.0/*` |
-| `HOST/BUS_ID/ETH_PORT` | Specific system and port | `bh-glx-c02u02/01:00.0/ETH07` |
-| `HOST/*` | All ports on system | `bh-glx-c02u02/*` |
-| `*/ETH_PORT` | Specific port on all systems | `*/ETH07` |
+
+| Pattern                | Description                  | Example                       |
+| ---------------------- | ---------------------------- | ----------------------------- |
+| `all`                  | All lanes on all systems     | `all`                         |
+| `BUS_ID/ETH_PORT`      | Specific port, all lanes     | `01:00.0/ETH07`               |
+| `BUS_ID/`*             | All ports on bus ID          | `01:00.0/*`                   |
+| `HOST/BUS_ID/ETH_PORT` | Specific system and port     | `bh-glx-c02u02/01:00.0/ETH07` |
+| `HOST/*`               | All ports on system          | `bh-glx-c02u02/*`             |
+| `*/ETH_PORT`           | Specific port on all systems | `*/ETH07`                     |
+
 
 ### Examples
 
@@ -1066,6 +1068,7 @@ bh-analyze-systems info
 ```
 
 Verify:
+
 - Database has data (total tests > 0)
 - Lane specification matches data in database
 - Speed filter matches available speeds
