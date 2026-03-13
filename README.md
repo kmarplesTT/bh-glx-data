@@ -2,7 +2,7 @@
 
 A modern Python package for collecting and analyzing test data for BH Galaxy system tests. Includes tools for Jira CSV retrieval, Quanta failure data extraction, Excel report generation, and platform topology queries.
 
-**Version:** 0.3.0 (Alpha)
+**Version:** 0.5.0 (Alpha)
 **Python:** 3.10+
 **License:** MIT
 
@@ -466,6 +466,41 @@ bh-glx-data --log-level DEBUG <command> [options]
 
 ## Changelog
 
+### Version 0.5.0 (2026-03-13)
+
+**New Features**:
+
+- ✨ Enhanced BER Statistics Heatmap with Variance Indicators
+  - New `variance` statistic option showing average BER with consistency symbols
+  - Dual-indicator visualization: color for magnitude, symbol for variance
+  - Five variance levels: Very Consistent (●), Consistent (◆), Moderate (▲), High (■), Extreme (✕)
+  - Variance calculation based on max/avg ratio to identify intermittent issues
+  - New `calculate_variance_indicator()` function in statistics module
+  - Enhanced `_render_terminal_ber_heatmap()` with variance mode support
+  - New `_format_variance_legend()` helper for legend display
+  - Updated CLI to accept `--statistic variance` option
+  - Comprehensive test suite with 20+ tests covering all variance levels
+  - Updated user guide: `docs/user_guides/bh-analyze-systems.md`
+  - Diagnostic patterns help distinguish persistent vs. intermittent failures
+  - Single-glance identification of consistently high BER lanes and occasional spikes
+  - 100% backward compatibility with existing heatmap modes (min/max/avg/high_ber)
+
+**Example**:
+```bash
+# Show variance heatmap
+bh-analyze-systems stats all --format heatmap --statistic variance
+
+# Compare with standard metrics
+bh-analyze-systems stats all --format heatmap --statistic max
+bh-analyze-systems stats all --format heatmap --statistic avg
+```
+
+**Use Cases**:
+- Identify lanes with consistent high BER (hardware fault) vs. occasional spikes (environmental)
+- Spot intermittent issues indicated by extreme variance symbols (✕)
+- Prioritize troubleshooting: consistent failures vs. intermittent issues
+- Single view shows both magnitude and stability of BER performance
+
 ### Version 0.3.0 (2026-03-12)
 
 **New Features**:
@@ -547,5 +582,5 @@ bh-topology 01:00.0 ETH10 qc3
 
 ---
 
-**Last Updated:** 2026-03-12
-**Package Version:** 0.3.0
+**Last Updated:** 2026-03-13
+**Package Version:** 0.5.0
