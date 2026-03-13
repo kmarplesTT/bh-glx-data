@@ -305,6 +305,9 @@ class CSVIngester:
         try:
             # Read CSV in chunks
             for chunk in pd.read_csv(csv_file, chunksize=self.chunk_size):
+                # Normalize column names: lowercase and replace spaces with underscores
+                chunk.columns = chunk.columns.str.lower().str.replace(' ', '_')
+
                 # Filter by status
                 filtered_chunk = chunk[chunk["test_status"].isin(status_filter)]
                 rows_filtered += len(chunk) - len(filtered_chunk)

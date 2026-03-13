@@ -389,12 +389,18 @@ class DatabaseManager:
         status_breakdown = dict(zip(status_df["test_status"], status_df["count"]))
 
         # Date range
-        date_query = "SELECT MIN(date) as min_date, MAX(date) as max_date FROM prbs_tests"
+        date_query = "SELECT MIN(date) as min_date, MAX(date) as max_date FROM prbs_tests WHERE date IS NOT NULL AND date != ''"
         date_df = self.execute_query(date_query)
-        if not date_df.empty:
-            date_range = (date_df["min_date"].iloc[0], date_df["max_date"].iloc[0])
+        if not date_df.empty and date_df["min_date"].iloc[0] is not None:
+            min_date = date_df["min_date"].iloc[0]
+            max_date = date_df["max_date"].iloc[0]
+            # Handle empty strings
+            if min_date and min_date.strip() and max_date and max_date.strip():
+                date_range = (min_date, max_date)
+            else:
+                date_range = ("N/A", "N/A")
         else:
-            date_range = (None, None)
+            date_range = ("N/A", "N/A")
 
         # Total ingestions
         total_ingestions = (
