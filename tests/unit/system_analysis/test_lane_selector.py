@@ -75,9 +75,80 @@ class TestLaneSelector:
             LaneSelector.from_spec("invalid")
 
     def test_from_spec_too_many_parts(self):
-        """Test that too many parts raises error."""
+        """Test that too many parts raises error (without lane number)."""
+        # Note: 4-part specs are now valid with lane numbers
         with pytest.raises(LaneSelectorError):
-            LaneSelector.from_spec("host/bus/eth/extra")
+            LaneSelector.from_spec("host/bus/eth/extra/too_many")
+
+    def test_from_spec_bus_eth_lane(self):
+        """Test parsing 'bus_id/eth_id/lane' specification."""
+        selector = LaneSelector.from_spec("01:00.0/ETH07/4")
+
+        assert selector.host is None
+        assert selector.bus_id == "01:00.0"
+        assert selector.eth_id == "ETH07"
+        assert selector.lane_num == 4
+
+    def test_from_spec_host_bus_eth_lane(self):
+        """Test parsing 'host/bus_id/eth_id/lane' specification."""
+        selector = LaneSelector.from_spec("bh-glx-c02u02/01:00.0/ETH07/4")
+
+        assert selector.host == "bh-glx-c02u02"
+        assert selector.bus_id == "01:00.0"
+        assert selector.eth_id == "ETH07"
+        assert selector.lane_num == 4
+
+    def test_from_spec_wildcard_eth_lane(self):
+        """Test parsing '*/eth_id/lane' specification."""
+        selector = LaneSelector.from_spec("*/ETH07/4")
+
+        assert selector.host is None
+        assert selector.bus_id is None
+        assert selector.eth_id == "ETH07"
+        assert selector.lane_num == 4
+
+    def test_from_spec_lane_validation(self):
+        """Test that invalid lane numbers raise errors."""
+        with pytest.raises(LaneSelectorError):
+            LaneSelector.from_spec("01:00.0/ETH07/8")  # Lane must be 0-7
+
+        with pytest.raises(LaneSelectorError):
+            LaneSelector.from_spec("01:00.0/ETH07/-1")  # Negative lane
+
+        with pytest.raises(LaneSelectorError):
+            LaneSelector.from_spec("01:00.0/ETH07/10")  # Too high
+
+    def test_get_lane_columns_all_lanes(self):
+        """Test get_lane_columns when no lane_num specified."""
+        selector = LaneSelector.from_spec("01:00.0/ETH07")
+        all_columns = [f"acc_ber_lane{i}" for i in range(8)]
+
+        result = selector.get_lane_columns(all_columns)
+
+        assert result == all_columns
+
+    def test_get_lane_columns_specific_lane(self):
+        """Test get_lane_columns when lane_num specified."""
+        selector = LaneSelector.from_spec("01:00.0/ETH07/4")
+        all_columns = [f"acc_ber_lane{i}" for i in range(8)]
+
+        result = selector.get_lane_columns(all_columns)
+
+        assert result == ["acc_ber_lane4"]
+
+    def test_spec_rebuild_with_lane(self):
+        """Test that spec is correctly rebuilt with lane number."""
+        selector = LaneSelector.from_spec("01:00.0/ETH07/4")
+
+        assert selector.spec == "01:00.0/ETH07/4"
+
+    def test_repr_with_lane(self):
+        """Test __repr__ includes lane_num."""
+        selector = LaneSelector.from_spec("01:00.0/ETH07/4")
+
+        repr_str = repr(selector)
+
+        assert "lane_num=4" in repr_str
 
     def test_to_sql_filter_all(self):
         """Test SQL filter generation for 'all'."""

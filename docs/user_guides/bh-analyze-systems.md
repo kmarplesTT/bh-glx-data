@@ -2,19 +2,27 @@
 
 A database utility for collecting, storing, and analyzing PRBS test data across multiple systems. This tool provides efficient query capabilities with visualization options for identifying serdes lane performance patterns.
 
-**Version:** 0.5.0
+**Version:** 0.6.0
 **Purpose:** Aggregate PRBS test data from CSV files with memory-efficient storage and interactive analysis
 
 ---
 
-## What's New in Version 0.5.0
+## What's New in Version 0.6.0
 
-Version 0.5.0 introduces advanced variance visualization for diagnosing BER consistency issues:
+Version 0.6.0 introduces powerful new analysis capabilities and improves variance visualization:
 
-- **Variance Heatmap** - New `--statistic variance` option displays average BER (color) with variance symbols (shape) to show both magnitude and consistency in a single view
+- **Histogram Analysis** - New `histogram` command displays BER distribution across logarithmic bins, helping identify whether failures are clustered at specific BER levels or spread across ranges
+- **Advanced Statistics** - New `advanced-stats` command computes per-host BER statistics and then aggregates them fleet-wide, revealing performance consistency across multiple systems
+- **Extended Lane Selection** - Lane specifications now support specific lane numbers (e.g., `01:00.0/ETH07/4` for lane 4), enabling targeted single-lane analysis
+- **Improved Variance Display** - The `--statistic avg` option now always shows variance indicators by default (replaces the old `variance` option)
+
+**Breaking Change:** The `--statistic variance` option has been renamed to `avg`. Users previously using `--statistic variance` should switch to `--statistic avg`, which now always includes variance indicators.
+
+### Version 0.5.0 Highlights
+
+- **Variance Visualization** - Average BER heatmaps display variance symbols (shape) alongside BER magnitude (color) to show both performance and consistency
 - **Five Variance Levels** - Symbols indicate consistency: `●` (very consistent), `◆` (consistent), `▲` (moderate variance), `■` (high variance), `✕` (extreme spikes)
 - **Single-Glance Diagnostics** - Quickly identify persistent hardware issues vs. intermittent environmental problems
-- **Variance Indicators** - Based on max/avg ratio, helping distinguish lanes with occasional spikes from consistently problematic lanes
 
 ### Version 0.4.0 Highlights
 
@@ -81,14 +89,19 @@ bh-analyze-systems --db /path/to/custom.db <command>
 
 ### Lane Selection
 
-Lanes are specified using a flexible syntax:
+Lanes are specified using a flexible syntax that supports system, bus ID, ETH port, and individual lane selection:
 
 - `all` - All lanes on all systems
 - `01:00.0/ETH07` - Specific port, all 8 lanes
+- `01:00.0/ETH07/4` - Specific lane 4 on specific port
 - `01:00.0/*` - All ports on a bus ID
 - `bh-glx-c02u02/01:00.0/ETH07` - Specific system and port
+- `bh-glx-c02u02/01:00.0/ETH07/4` - Specific lane on specific system
 - `bh-glx-c02u02/*` - All ports on a system
 - `*/ETH07` - ETH07 on all systems
+- `*/ETH07/4` - Lane 4 on ETH07 across all systems
+
+**New in v0.6.0:** Lane numbers (0-7) can now be specified as a fourth component in the lane specification. This enables targeted analysis of individual serdes lanes.
 
 ### Query Types
 
@@ -188,7 +201,7 @@ bh-analyze-systems stats <lane_spec> [OPTIONS]
 
 - `--speed SPEED` - Filter by train speed (can be specified multiple times)
 - `--format {table|heatmap}` - Output format (default: table)
-- `--statistic {avg|min|max|high_ber|variance}` - Statistic to display in heatmap (default: max)
+- `--statistic {avg|min|max|high_ber}` - Statistic to display in heatmap (default: max; avg includes variance indicators)
 - `--color-scheme SCHEME` - Color scheme for heatmap (default, sensitive, tolerant)
 
 **Example (Table Format):**
@@ -238,10 +251,9 @@ Displays a color-coded heatmap with BER values across all systems and lanes.
 **Heatmap Statistic Options:**
 
 - `max` (default) - Display maximum BER values in heatmap
-- `avg` - Display average BER values in heatmap
+- `avg` - Display average BER values with variance indicators (symbols show consistency: ●, ◆, ▲, ■, ✕)
 - `min` - Display minimum BER values in heatmap
 - `high_ber` - Display count of high BER (>= 0.1) occurrences in heatmap
-- `variance` - Display average BER with variance symbols (shows both magnitude and consistency)
 
 **Notes:**
 
@@ -377,6 +389,228 @@ Tests: 1,200  Systems: 24
 - Identify lanes with link training issues
 - Detect systematic training problems across systems
 - Compare training reliability by speed
+
+---
+
+### histogram
+
+Show BER distribution histogram for specific lane(s).
+
+```bash
+bh-analyze-systems histogram <lane_spec> [OPTIONS]
+```
+
+**Arguments:**
+
+- `lane_spec` - Lane specification (supports single lane or all lanes on a port)
+
+**Options:**
+
+- `--speed SPEED` - Filter by train speed
+- `--max-bar-width WIDTH` - Maximum width of histogram bars in characters (default: 50)
+
+**Example (Single Lane):**
+
+```bash
+# Show histogram for a specific lane
+bh-analyze-systems histogram 01:00.0/ETH07/4 --speed 200
+
+# Output:
+BER Histogram - 01:00.0/ETH07/lane4
+
+  < 1e-12   ████████████████████████████ 145
+  1e-12-11  ██████████████ 72
+  1e-11-10  ████████ 42
+  1e-10-9   ████ 21
+  1e-9-8    ██ 12
+  1e-8-7    █ 5
+  1e-7-6    █ 3
+  1e-6-5     1
+  1e-5-4     0
+  >= 1e-4    0
+
+Total Samples: 301  |  Systems: 5  |  Speeds: 200
+```
+
+**Example (All Lanes on Port):**
+
+```bash
+# Show histograms for all 8 lanes on a port
+bh-analyze-systems histogram 01:00.0/ETH07 --speed 200
+
+# Output:
+BER Histograms - 01:00.0/ETH07 (all lanes)
+
+Lane 0:
+  < 1e-12   ████████████████████████████ 145
+  1e-12-11  ██████████████ 72
+  1e-11-10  ████████ 42
+  [... additional bins ...]
+
+Lane 1:
+  < 1e-12   ███████████████████████ 120
+  1e-12-11  ████████████ 65
+  1e-11-10  ██████ 38
+  [... additional bins ...]
+
+[... lanes 2-7 ...]
+
+Total Samples: 2408  |  Systems: 5  |  Speeds: 200
+```
+
+**Histogram Bins:**
+
+The histogram uses 10 logarithmic bins to categorize BER values:
+
+- `< 1e-12` - Excellent performance
+- `1e-12 to 1e-11` - Very good
+- `1e-11 to 1e-10` - Good
+- `1e-10 to 1e-9` - Acceptable
+- `1e-9 to 1e-8` - Marginal
+- `1e-8 to 1e-7` - Poor
+- `1e-7 to 1e-6` - Very poor
+- `1e-6 to 1e-5` - Critical
+- `1e-5 to 1e-4` - Severe
+- `>= 1e-4` - Failed
+
+**Visualization:**
+
+- Bars are color-coded using the BER color scheme (green for low, red for high)
+- Bar length is proportional to the count (scaled to max_bar_width)
+- Exact count is displayed next to each bar
+- Separate histogram displayed for each lane when multiple lanes are queried
+
+**Use Cases:**
+
+- Understand BER distribution patterns for a specific lane
+- Identify if failures cluster at specific BER levels or spread across ranges
+- Compare BER distributions across different lanes on the same port
+- Diagnose whether issues are consistent (single bin) or variable (multiple bins)
+- Spot bimodal distributions indicating intermittent problems
+
+**Tips:**
+
+- Single-lane histograms (e.g., `01:00.0/ETH07/4`) are best for detailed analysis
+- Port-level histograms (e.g., `01:00.0/ETH07`) show all 8 lanes for comparison
+- Use `--speed` to focus on specific training speeds
+- Look for unexpected bins - e.g., if most samples are in excellent range but some are critical, investigate intermittent issues
+
+---
+
+### advanced-stats
+
+Show aggregated host statistics with fleet-wide performance consistency analysis.
+
+```bash
+bh-analyze-systems advanced-stats <lane_spec> [OPTIONS]
+```
+
+**Arguments:**
+
+- `lane_spec` - Lane specification
+
+**Options:**
+
+- `--speed SPEED` - Filter by train speed
+
+**Example:**
+
+```bash
+# Show advanced statistics for a specific lane
+bh-analyze-systems advanced-stats 01:00.0/ETH07/4 --speed 200
+
+# Output:
+Per-Host Statistics - 01:00.0/ETH07/lane4
+┌────────────────┬──────────┬──────────┬──────────┬─────────┐
+│ Host           │ Min BER  │ Avg BER  │ Max BER  │ Samples │
+├────────────────┼──────────┼──────────┼──────────┼─────────┤
+│ bh-glx-c02u02  │ 1.00e-12 │ 2.00e-11 │ 3.00e-10 │ 150     │
+│ bh-glx-c03u02  │ 5.00e-13 │ 1.00e-11 │ 5.00e-10 │ 151     │
+└────────────────┴──────────┴──────────┴──────────┴─────────┘
+
+Statistics of Host Statistics
+┌───────────┬──────────┬──────────┬──────────┐
+│ Metric    │ Minimum  │ Average  │ Maximum  │
+├───────────┼──────────┼──────────┼──────────┤
+│ MIN       │ 5.00e-13 │ 7.50e-13 │ 1.00e-12 │
+│ AVG       │ 1.00e-11 │ 1.50e-11 │ 2.00e-11 │
+│ MAX       │ 3.00e-10 │ 4.00e-10 │ 5.00e-10 │
+└───────────┴──────────┴──────────┴──────────┘
+
+Systems: 2  |  Total Samples: 301  |  Speeds: 200
+```
+
+**How It Works:**
+
+The command performs two-level aggregation:
+
+1. **First Level (Per-Host Statistics):**
+   - For each system, calculate min/avg/max BER across all test samples for the specified lane
+   - Display in the "Per-Host Statistics" table
+
+2. **Second Level (Statistics of Statistics):**
+   - Take the per-host min values and calculate min/avg/max of those values
+   - Take the per-host avg values and calculate min/avg/max of those values
+   - Take the per-host max values and calculate min/avg/max of those values
+   - Display in the "Statistics of Host Statistics" table
+
+**Interpreting Results:**
+
+The "Statistics of Host Statistics" table reveals fleet-wide performance patterns:
+
+- **MIN row** - Shows the range of best-case performance across systems
+   - Narrow range (min≈max) = Consistent best-case performance
+   - Wide range (min<<max) = Some systems perform much better than others at their best
+
+- **AVG row** - Shows the range of typical performance across systems
+   - Narrow range = All systems perform similarly on average
+   - Wide range = Significant variation in typical performance across fleet
+
+- **MAX row** - Shows the range of worst-case performance across systems
+   - Narrow range = Worst-case behavior is consistent
+   - Wide range = Some systems experience much worse spikes than others
+
+**Use Cases:**
+
+- Assess performance consistency across a fleet of systems
+- Identify outlier systems with consistently better or worse performance
+- Determine if BER issues are systemic (all systems) or isolated (specific systems)
+- Compare fleet-wide performance across different lanes or speeds
+- Prioritize systems for investigation based on worst-case performance
+
+**Example Interpretations:**
+
+**Scenario 1: Consistent Fleet**
+```
+MIN: min=1e-12, avg=1.1e-12, max=1.2e-12
+AVG: min=2e-11, avg=2.1e-11, max=2.2e-11
+MAX: min=3e-10, avg=3.2e-10, max=3.5e-10
+```
+Interpretation: All systems perform very similarly. Narrow ranges in all metrics indicate consistent hardware quality and environmental conditions.
+
+**Scenario 2: Outlier System**
+```
+MIN: min=5e-13, avg=1e-12, max=5e-12
+AVG: min=1e-11, avg=2e-11, max=8e-11
+MAX: min=3e-10, avg=4e-10, max=2e-09
+```
+Interpretation: Wide ranges suggest one or more outlier systems. The system with max=2e-09 should be investigated for hardware or environmental issues.
+
+**Scenario 3: Variable Performance**
+```
+MIN: min=1e-12, avg=1.1e-12, max=1.2e-12
+AVG: min=2e-11, avg=2.2e-11, max=2.4e-11
+MAX: min=5e-10, avg=8e-10, max=5e-09
+```
+Interpretation: Good consistency in typical performance (MIN and AVG), but wide range in MAX suggests some systems experience occasional severe spikes. This could indicate environmental sensitivity (temperature, power, cables).
+
+**Tips:**
+
+- Use this command after identifying problem lanes with standard `stats` command
+- Compare results across different speeds to see if consistency changes with speed
+- Look at the Per-Host Statistics table to identify specific outlier systems
+- Narrow ranges indicate good fleet consistency; wide ranges suggest investigation needed
+- Use with `*/ETH07/4` to analyze the same lane across all systems
 
 ---
 
@@ -566,14 +800,19 @@ The lane selection syntax allows flexible queries across systems, ports, and lan
 
 ### Syntax Patterns
 
-| Pattern                | Description                  | Example                       |
-| ---------------------- | ---------------------------- | ----------------------------- |
-| `all`                  | All lanes on all systems     | `all`                         |
-| `BUS_ID/ETH_PORT`      | Specific port, all lanes     | `01:00.0/ETH07`               |
-| `BUS_ID/*`             | All ports on bus ID          | `01:00.0/*`                   |
-| `HOST/BUS_ID/ETH_PORT` | Specific system and port     | `bh-glx-c02u02/01:00.0/ETH07` |
-| `HOST/*`               | All ports on system          | `bh-glx-c02u02/*`             |
-| `*/ETH_PORT`           | Specific port on all systems | `*/ETH07`                     |
+| Pattern                      | Description                      | Example                           |
+| ---------------------------- | -------------------------------- | --------------------------------- |
+| `all`                        | All lanes on all systems         | `all`                             |
+| `BUS_ID/ETH_PORT`            | Specific port, all lanes         | `01:00.0/ETH07`                   |
+| `BUS_ID/ETH_PORT/LANE`       | Specific lane on port            | `01:00.0/ETH07/4`                 |
+| `BUS_ID/*`                   | All ports on bus ID              | `01:00.0/*`                       |
+| `HOST/BUS_ID/ETH_PORT`       | Specific system and port         | `bh-glx-c02u02/01:00.0/ETH07`     |
+| `HOST/BUS_ID/ETH_PORT/LANE`  | Specific lane on system          | `bh-glx-c02u02/01:00.0/ETH07/4`   |
+| `HOST/*`                     | All ports on system              | `bh-glx-c02u02/*`                 |
+| `*/ETH_PORT`                 | Specific port on all systems     | `*/ETH07`                         |
+| `*/ETH_PORT/LANE`            | Specific lane across all systems | `*/ETH07/4`                       |
+
+**New in v0.6.0:** Lane numbers (0-7) can be specified as the fourth component to target individual serdes lanes.
 
 
 ### Examples
@@ -585,6 +824,9 @@ bh-analyze-systems stats all
 # Query specific port (8 lanes)
 bh-analyze-systems stats "01:00.0/ETH07"
 
+# Query specific lane on port (NEW in v0.6.0)
+bh-analyze-systems stats "01:00.0/ETH07/4"
+
 # Query all ports on a bus ID
 bh-analyze-systems stats "01:00.0/*"
 
@@ -594,8 +836,14 @@ bh-analyze-systems stats "bh-glx-c02u02/*"
 # Query same port across all systems
 bh-analyze-systems stats "*/ETH07"
 
+# Query same lane across all systems (NEW in v0.6.0)
+bh-analyze-systems stats "*/ETH07/4"
+
 # Query with specific system and port
 bh-analyze-systems stats "bh-glx-c02u02/01:00.0/ETH07"
+
+# Query specific lane on specific system (NEW in v0.6.0)
+bh-analyze-systems stats "bh-glx-c02u02/01:00.0/ETH07/4"
 ```
 
 ### Lane Numbering
@@ -605,7 +853,18 @@ Each ETH port has 8 serdes lanes numbered 0-7:
 - `lane0`, `lane1`, `lane2`, `lane3` - First 4 lanes
 - `lane4`, `lane5`, `lane6`, `lane7` - Second 4 lanes
 
-Queries return results for all 8 lanes per port.
+Queries return results for all 8 lanes per port unless a specific lane number is specified.
+
+**New in v0.6.0:** You can target individual lanes by adding a lane number (0-7) to the specification:
+
+```bash
+# Query single lane
+bh-analyze-systems stats "01:00.0/ETH07/4"
+bh-analyze-systems histogram "01:00.0/ETH07/4" --speed 200
+
+# Query same lane across all systems
+bh-analyze-systems advanced-stats "*/ETH07/4" --speed 200
+```
 
 ---
 
@@ -663,32 +922,37 @@ bh-analyze-systems training all --speed 200 --format heatmap
 
 ---
 
-### Variance Heatmap Visualization
+### Average BER with Variance Indicators
 
-The variance heatmap combines BER magnitude (color) with consistency indicators (symbols) to show both average performance and variability in a single view.
+The average BER heatmap combines BER magnitude (color) with consistency indicators (symbols) to show both average performance and variability in a single view. This is now the default behavior when using `--statistic avg`.
+
+**Changed in v0.6.0:** The `--statistic variance` option has been renamed to `avg`. The avg statistic now always includes variance indicators by default.
 
 #### Usage
 
 ```bash
-# Show variance heatmap for all lanes
-bh-analyze-systems stats all --format heatmap --statistic variance
+# Show average BER with variance indicators for all lanes
+bh-analyze-systems stats all --format heatmap --statistic avg
 
 # Filter by speed
-bh-analyze-systems stats all --format heatmap --statistic variance --speed 200
+bh-analyze-systems stats all --format heatmap --statistic avg --speed 200
 
 # Specific ports
-bh-analyze-systems stats 01:00.0/ETH07 --format heatmap --statistic variance
+bh-analyze-systems stats 01:00.0/ETH07 --format heatmap --statistic avg
 
 # Use different color schemes
-bh-analyze-systems stats all --format heatmap --statistic variance --color-scheme sensitive
+bh-analyze-systems stats all --format heatmap --statistic avg --color-scheme sensitive
+
+# Table format shows all statistics (min, avg, max, high BER)
+bh-analyze-systems stats all --format table --speed 200
 ```
 
-#### Understanding the Variance Heatmap
+#### Understanding the Average BER Heatmap
 
 Each cell displays:
 - **BER value**: Average BER across all test runs
 - **Color**: Indicates BER magnitude (green=good, red=bad)
-- **Symbol**: Indicates consistency/variance
+- **Symbol**: Indicates consistency/variance (always shown for avg statistic)
 
 **Variance Symbols:**
 - `●` Very Consistent (max/avg < 2) - Stable, predictable performance
@@ -902,6 +1166,8 @@ bh-analyze-systems shell
 - `threshold <lane-spec> [--speed SPEED] [--format FORMAT]` - Threshold exceeded counts
 - `custom <lane-spec> <threshold> [--speed SPEED] [--format FORMAT]` - Custom threshold counts
 - `training <lane-spec> [--speed SPEED] [--format FORMAT]` - Training failure counts
+- `histogram <lane-spec> [--speed SPEED] [--max-bar-width WIDTH]` - BER distribution histogram
+- `advanced-stats <lane-spec> [--speed SPEED]` - Aggregated host statistics
 
 **Information Commands:**
 
@@ -930,13 +1196,16 @@ bh-analyze> stats all --speed 200 --format heatmap
 [displays heatmap of maximum BER values by default]
 
 bh-analyze> stats all --speed 200 --format heatmap --statistic avg
-[displays heatmap of average BER values]
+[displays heatmap with average BER and variance symbols]
 
 bh-analyze> stats all --speed 200 --format heatmap --statistic high_ber
 [displays heatmap of high BER counts]
 
-bh-analyze> stats all --speed 200 --format heatmap --statistic variance
-[displays heatmap with average BER and variance symbols]
+bh-analyze> histogram 01:00.0/ETH07/4 --speed 200
+[displays BER distribution histogram for lane 4]
+
+bh-analyze> advanced-stats */ETH07/4 --speed 200
+[displays per-host statistics and aggregated statistics for lane 4 across all systems]
 ```
 
 ### Shell Features
@@ -974,6 +1243,10 @@ bh-analyze> stats 01:00.0/ETH07 --speed 200 --format heatmap --statistic max
 bh-analyze> stats 01:00.0/ETH07 --speed 200 --format heatmap --statistic avg
 bh-analyze> training 01:00.0/* --speed 200 --format heatmap
 bh-analyze> custom all 1e-10
+
+# Use new v0.6.0 features
+bh-analyze> histogram 01:00.0/ETH07/4 --speed 200
+bh-analyze> advanced-stats */ETH07/4 --speed 200
 
 # Export results
 bh-analyze> export excel --output my_analysis.xlsx
@@ -1113,8 +1386,8 @@ bh-analyze-systems export-excel \
 ### Workflow 5: Variance Analysis for Troubleshooting
 
 ```bash
-# 1. Start with variance heatmap to get overall picture
-bh-analyze-systems stats all --speed 200 --format heatmap --statistic variance
+# 1. Start with average BER heatmap with variance indicators to get overall picture
+bh-analyze-systems stats all --speed 200 --format heatmap --statistic avg
 
 # 2. Focus on ports with extreme spikes (✕ symbols)
 bh-analyze-systems stats 01:00.0/ETH07 --speed 200 --format table
@@ -1126,7 +1399,7 @@ bh-analyze-systems stats 01:00.0/ETH07 --speed 200 --format heatmap --statistic 
 bh-analyze-systems training 01:00.0/ETH07 --speed 200
 
 # 5. Use sensitive color scheme to identify marginal lanes
-bh-analyze-systems stats all --speed 200 --format heatmap --statistic variance --color-scheme sensitive
+bh-analyze-systems stats all --speed 200 --format heatmap --statistic avg --color-scheme sensitive
 
 # 6. Export findings for hardware team
 bh-analyze-systems export-excel --output variance_analysis.xlsx
@@ -1144,14 +1417,72 @@ bh-analyze> systems
 bh-analyze> training all --speed 200 --format heatmap
 bh-analyze> stats 01:00.0/ETH07 --speed 200
 bh-analyze> stats all --speed 200 --format heatmap --statistic avg
-bh-analyze> stats all --speed 200 --format heatmap --statistic variance
 bh-analyze> stats all --speed 200 --format heatmap --statistic high_ber
 bh-analyze> custom 01:00.0/* 1e-10
+bh-analyze> histogram 01:00.0/ETH07/4 --speed 200
+bh-analyze> advanced-stats */ETH07/4 --speed 200
 bh-analyze> export excel --output session_results.xlsx
 bh-analyze> exit
 ```
 
-### Workflow 7: Integration with Jira Data
+### Workflow 7: Lane-Level Deep Dive (NEW in v0.6.0)
+
+```bash
+# 1. Start with overall heatmap to identify problem lanes
+bh-analyze-systems stats all --speed 200 --format heatmap --statistic avg
+
+# 2. Focus on a specific problematic lane
+bh-analyze-systems stats 01:00.0/ETH07/4 --speed 200 --format table
+
+# 3. View BER distribution histogram for the lane
+bh-analyze-systems histogram 01:00.0/ETH07/4 --speed 200
+
+# 4. Compare the same lane across all systems
+bh-analyze-systems advanced-stats */ETH07/4 --speed 200
+
+# 5. If issue is fleet-wide, check all lanes on that port
+bh-analyze-systems histogram 01:00.0/ETH07 --speed 200
+
+# 6. Export detailed findings
+bh-analyze-systems export-excel --output lane_analysis.xlsx
+```
+
+**Use Case:** This workflow is ideal when you've identified a specific lane with issues and need to understand:
+- Is the BER distribution clustered or spread? (histogram)
+- Is this lane problematic on all systems or just one? (advanced-stats)
+- What's the performance consistency across the fleet? (advanced-stats statistics of statistics)
+
+### Workflow 8: Fleet-Wide Performance Consistency
+
+```bash
+# 1. Check performance consistency for critical lanes across fleet
+bh-analyze-systems advanced-stats */ETH07/0 --speed 200
+bh-analyze-systems advanced-stats */ETH07/1 --speed 200
+bh-analyze-systems advanced-stats */ETH07/4 --speed 200
+
+# 2. Identify outlier systems from the per-host statistics
+# (Look at the "Per-Host Statistics" table for systems with higher BER)
+
+# 3. Deep dive into outlier system
+bh-analyze-systems stats bh-glx-c02u02/* --speed 200 --format heatmap --statistic avg
+
+# 4. Compare histogram of outlier vs typical system
+bh-analyze-systems histogram bh-glx-c02u02/01:00.0/ETH07/4 --speed 200
+bh-analyze-systems histogram bh-glx-c03u02/01:00.0/ETH07/4 --speed 200
+
+# 5. Export for root cause analysis
+bh-analyze-systems export-excel \
+  --output fleet_consistency.xlsx \
+  --hosts bh-glx-c02u02 bh-glx-c03u02 \
+  --speeds 200
+```
+
+**Use Case:** This workflow helps you:
+- Identify systems performing differently from the fleet average
+- Understand if issues are hardware-specific or environmental
+- Prioritize which systems need attention first
+
+### Workflow 9: Integration with Jira Data
 
 ```bash
 # 1. Retrieve data from Jira
@@ -1409,4 +1740,4 @@ bh-analyze> help
 ---
 
 **Last Updated:** 2026-03-13
-**Tool Version:** 0.5.0
+**Tool Version:** 0.6.0

@@ -128,9 +128,9 @@ Lane Specifications:
     )
     stats_parser.add_argument(
         "--statistic",
-        choices=["avg", "min", "max", "high_ber", "variance"],
+        choices=["avg", "min", "max", "high_ber"],
         default="max",
-        help="Statistic to display in heatmap (variance shows avg with consistency symbols)",
+        help="Statistic to display in heatmap (avg shows average with variance indicators)",
     )
 
     # Threshold command
@@ -200,6 +200,45 @@ Lane Specifications:
         "--color-scheme",
         type=str,
         help="Color scheme name for heatmap",
+    )
+
+    # Histogram command
+    histogram_parser = subparsers.add_parser("histogram", help="Show BER histogram for lane(s)")
+    histogram_parser.add_argument(
+        "lane_spec",
+        type=str,
+        help="Lane specification (e.g., 01:00.0/ETH07/4 for single lane, 01:00.0/ETH07 for all lanes)",
+    )
+    histogram_parser.add_argument(
+        "--speed",
+        type=int,
+        action="append",
+        dest="speeds",
+        help="Filter by train speed",
+    )
+    histogram_parser.add_argument(
+        "--max-bar-width",
+        type=int,
+        default=50,
+        help="Maximum width of histogram bars in characters (default: 50)",
+    )
+
+    # Advanced stats command
+    advanced_stats_parser = subparsers.add_parser(
+        "advanced-stats",
+        help="Show aggregated host statistics (per-host BER stats + statistics of those stats)",
+    )
+    advanced_stats_parser.add_argument(
+        "lane_spec",
+        type=str,
+        help="Lane specification",
+    )
+    advanced_stats_parser.add_argument(
+        "--speed",
+        type=int,
+        action="append",
+        dest="speeds",
+        help="Filter by train speed",
     )
 
     # Info command
@@ -458,6 +497,74 @@ def handle_training(db: DatabaseManager, args: argparse.Namespace) -> int:
         return 1
 
 
+def handle_histogram(db: DatabaseManager, args: argparse.Namespace) -> int:
+    """Handle histogram command.
+
+    Args:
+        db: DatabaseManager instance
+        args: Parsed arguments
+
+    Returns:
+        Exit code (0 for success, 1 for error)
+    """
+    try:
+        selector = LaneSelector.from_spec(args.lane_spec)
+        engine = QueryEngine(db)
+
+        result = engine.query_ber_histogram(selector, train_speeds=args.speeds)
+
+        renderer = HeatMapRenderer()
+        output = renderer.render_ber_histogram(result, max_bar_width=args.max_bar_width)
+        print(output)
+
+        return 0
+
+    except LaneSelectorError as e:
+        logger.error(f"Invalid lane specification: {e}")
+        return 1
+    except QueryError as e:
+        logger.error(f"Query failed: {e}")
+        return 1
+    except Exception as e:
+        logger.error(f"Unexpected error: {e}")
+        logger.debug("", exc_info=True)
+        return 1
+
+
+def handle_advanced_stats(db: DatabaseManager, args: argparse.Namespace) -> int:
+    """Handle advanced-stats command.
+
+    Args:
+        db: DatabaseManager instance
+        args: Parsed arguments
+
+    Returns:
+        Exit code (0 for success, 1 for error)
+    """
+    try:
+        selector = LaneSelector.from_spec(args.lane_spec)
+        engine = QueryEngine(db)
+
+        result = engine.query_aggregated_host_stats(selector, train_speeds=args.speeds)
+
+        renderer = TableRenderer()
+        output = renderer.render_aggregated_host_stats(result)
+        print(output)
+
+        return 0
+
+    except LaneSelectorError as e:
+        logger.error(f"Invalid lane specification: {e}")
+        return 1
+    except QueryError as e:
+        logger.error(f"Query failed: {e}")
+        return 1
+    except Exception as e:
+        logger.error(f"Unexpected error: {e}")
+        logger.debug("", exc_info=True)
+        return 1
+
+
 def handle_info(db: DatabaseManager, args: argparse.Namespace) -> int:
     """Handle info command.
 
@@ -612,7 +719,7 @@ def main():
         db = DatabaseManager(db_path)
 
         # Initialize schema if this is a new database or command is not info/shell
-        if args.command in ["ingest", "stats", "threshold", "custom", "training", "export-excel"]:
+        if args.command in ["ingest", "stats", "threshold", "custom", "training", "histogram", "advanced-stats", "export-excel"]:
             db.initialize_schema()
         elif args.command in ["info", "shell"]:
             # For info and shell, only initialize if database doesn't exist
@@ -637,6 +744,10 @@ def main():
         return handle_custom(db, args)
     elif args.command == "training":
         return handle_training(db, args)
+    elif args.command == "histogram":
+        return handle_histogram(db, args)
+    elif args.command == "advanced-stats":
+        return handle_advanced_stats(db, args)
     elif args.command == "info":
         return handle_info(db, args)
     elif args.command == "export-excel":

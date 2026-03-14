@@ -1,4 +1,4 @@
-"""Tests for variance visualization feature."""
+"""Tests for avg with variance indicators visualization feature."""
 
 import pytest
 from bh_glx_data.system_analysis.statistics import calculate_variance_indicator
@@ -81,11 +81,11 @@ class TestVarianceIndicatorCalculation:
         assert result == "✕"
 
 
-class TestVarianceHeatmapRendering:
-    """Test variance heatmap rendering."""
+class TestAvgWithVarianceHeatmapRendering:
+    """Test avg with variance indicators heatmap rendering."""
 
-    def test_variance_mode_includes_symbols(self):
-        """Test that variance mode includes variance symbols in output."""
+    def test_avg_mode_includes_symbols(self):
+        """Test that avg mode includes variance symbols in output."""
         # Create sample statistics
         lane_stats = {
             "01:00.0/ETH00/lane0": LaneBERStats(
@@ -114,18 +114,18 @@ class TestVarianceHeatmapRendering:
         )
 
         renderer = HeatMapRenderer()
-        output = renderer.render_ber_heatmap(stats, metric="variance")
+        output = renderer.render_ber_heatmap(stats, metric="avg")
 
         # Check that symbols appear in output
         assert "●" in output
         assert "◆" in output
 
         # Check title
-        assert "VARIANCE" in output
-        assert "Average with Consistency Indicators" in output
+        assert "AVG" in output
+        assert "Variance Indicators" in output
 
-    def test_variance_legend_included(self):
-        """Test that variance legend is included in output."""
+    def test_avg_legend_included(self):
+        """Test that variance legend is included in avg output."""
         lane_stats = {
             "01:00.0/ETH00/lane0": LaneBERStats(
                 lane_id="01:00.0/ETH00/lane0",
@@ -145,7 +145,7 @@ class TestVarianceHeatmapRendering:
         )
 
         renderer = HeatMapRenderer()
-        output = renderer.render_ber_heatmap(stats, metric="variance")
+        output = renderer.render_ber_heatmap(stats, metric="avg")
 
         # Check legend components
         assert "Variance Indicators:" in output
@@ -155,8 +155,8 @@ class TestVarianceHeatmapRendering:
         assert "High Variance" in output
         assert "Extreme Spikes" in output
 
-    def test_variance_mode_colors_by_avg(self):
-        """Test that variance mode colors cells by average BER."""
+    def test_avg_mode_colors_by_avg(self):
+        """Test that avg mode colors cells by average BER."""
         # Create lane with low avg but high max (should be green with spike symbol)
         lane_stats = {
             "01:00.0/ETH00/lane0": LaneBERStats(
@@ -177,7 +177,7 @@ class TestVarianceHeatmapRendering:
         )
 
         renderer = HeatMapRenderer()
-        output = renderer.render_ber_heatmap(stats, metric="variance")
+        output = renderer.render_ber_heatmap(stats, metric="avg")
 
         # Should show extreme spike symbol
         assert "✕" in output
@@ -187,11 +187,11 @@ class TestVarianceHeatmapRendering:
         assert "1.0e-11" in output or "1e-11" in output
 
 
-class TestVarianceHeatmapIntegration:
-    """Integration tests for variance heatmap feature."""
+class TestAvgWithVarianceIntegration:
+    """Integration tests for avg with variance indicators feature."""
 
     def test_all_variance_levels_in_single_heatmap(self):
-        """Test heatmap with all 5 variance levels."""
+        """Test heatmap with all 5 variance levels using avg metric."""
         lane_stats = {
             f"01:00.0/ETH00/lane{i}": LaneBERStats(
                 lane_id=f"01:00.0/ETH00/lane{i}",
@@ -221,7 +221,7 @@ class TestVarianceHeatmapIntegration:
         )
 
         renderer = HeatMapRenderer()
-        output = renderer.render_ber_heatmap(stats, metric="variance")
+        output = renderer.render_ber_heatmap(stats, metric="avg")
 
         # Verify all symbols present
         assert "●" in output
@@ -230,8 +230,8 @@ class TestVarianceHeatmapIntegration:
         assert "■" in output
         assert "✕" in output
 
-    def test_variance_vs_standard_heatmap_output_differs(self):
-        """Test that variance mode produces different output than standard mode."""
+    def test_avg_with_variance_vs_other_metrics(self):
+        """Test that avg mode (with variance) produces different output than other metrics."""
         lane_stats = {
             "01:00.0/ETH00/lane0": LaneBERStats(
                 lane_id="01:00.0/ETH00/lane0",
@@ -252,21 +252,21 @@ class TestVarianceHeatmapIntegration:
 
         renderer = HeatMapRenderer()
 
-        # Render with variance
-        variance_output = renderer.render_ber_heatmap(stats, metric="variance")
-
-        # Render with avg (standard)
+        # Render with avg (has variance indicators)
         avg_output = renderer.render_ber_heatmap(stats, metric="avg")
 
+        # Render with max (no variance indicators)
+        max_output = renderer.render_ber_heatmap(stats, metric="max")
+
         # Outputs should differ
-        assert variance_output != avg_output
+        assert avg_output != max_output
 
-        # Variance output should have symbols, avg output should not
-        assert "◆" in variance_output
-        assert "◆" not in avg_output
+        # Avg output should have symbols, max output should not
+        assert "◆" in avg_output
+        assert "◆" not in max_output
 
-    def test_backward_compatibility_with_existing_metrics(self):
-        """Test that existing metrics (min/max/avg/high_ber) still work."""
+    def test_other_metrics_still_work(self):
+        """Test that other metrics (min/max/high_ber) still work without variance indicators."""
         lane_stats = {
             "01:00.0/ETH00/lane0": LaneBERStats(
                 lane_id="01:00.0/ETH00/lane0",
@@ -287,22 +287,50 @@ class TestVarianceHeatmapIntegration:
 
         renderer = HeatMapRenderer()
 
-        # All existing metrics should work without errors
+        # Min, max, and high_ber should work without errors
         output_min = renderer.render_ber_heatmap(stats, metric="min")
         output_max = renderer.render_ber_heatmap(stats, metric="max")
-        output_avg = renderer.render_ber_heatmap(stats, metric="avg")
         output_high_ber = renderer.render_ber_heatmap(stats, metric="high_ber")
 
         # Basic sanity checks
         assert "MIN" in output_min
         assert "MAX" in output_max
-        assert "AVG" in output_avg
         assert "HIGH_BER" in output_high_ber
 
-        # None should have variance symbols
-        for output in [output_min, output_max, output_avg, output_high_ber]:
+        # Min, max, high_ber should NOT have variance symbols
+        for output in [output_min, output_max, output_high_ber]:
             assert "●" not in output
             assert "◆" not in output
             assert "▲" not in output
             assert "■" not in output
             assert "✕" not in output
+
+    def test_avg_mode_has_variance_indicators(self):
+        """Test that avg mode includes variance indicators."""
+        lane_stats = {
+            "01:00.0/ETH00/lane0": LaneBERStats(
+                lane_id="01:00.0/ETH00/lane0",
+                min_ber=1e-12,
+                avg_ber=1e-11,
+                max_ber=5e-11,
+                sample_count=10,
+                high_ber_count=2
+            ),
+        }
+
+        stats = BERStatistics(
+            lane_stats=lane_stats,
+            num_tests=10,
+            num_systems=1,
+            train_speeds=[200]
+        )
+
+        renderer = HeatMapRenderer()
+        output_avg = renderer.render_ber_heatmap(stats, metric="avg")
+
+        # Avg mode should have variance symbols
+        assert "AVG" in output_avg
+        assert "Variance Indicators" in output_avg
+        # Should have at least one variance symbol
+        variance_symbols = ["●", "◆", "▲", "■", "✕"]
+        assert any(symbol in output_avg for symbol in variance_symbols)

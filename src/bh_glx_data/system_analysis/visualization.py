@@ -12,6 +12,8 @@ from rich.console import Console
 from rich.table import Table
 
 from bh_glx_data.system_analysis.query_engine import (
+    AggregatedHostStats,
+    BERHistogram,
     BERStatistics,
     CustomThresholdCounts,
     ThresholdExceededCounts,
@@ -277,6 +279,105 @@ class TableRenderer:
             return "-"
         return f"{value:.2e}"
 
+    def render_aggregated_host_stats(
+        self,
+        stats: Union[AggregatedHostStats, List[AggregatedHostStats]],
+    ) -> str:
+        """Render aggregated host statistics as two tables.
+
+        Args:
+            stats: Aggregated host statistics to render
+
+        Returns:
+            Formatted tables string
+        """
+        # Normalize to list for uniform processing
+        stats_list = [stats] if isinstance(stats, AggregatedHostStats) else stats
+
+        if not stats_list:
+            return "No aggregated host statistics available"
+
+        output_sections = []
+
+        # Render tables for each lane
+        for agg_stats in stats_list:
+            # Table 1: Per-Host Statistics
+            table1 = Table(
+                title=f"Per-Host Statistics - {agg_stats.lane_id}",
+                show_header=True,
+                header_style="bold cyan",
+            )
+
+            table1.add_column("Host", style="dim")
+            table1.add_column("Min BER", justify="right")
+            table1.add_column("Avg BER", justify="right")
+            table1.add_column("Max BER", justify="right")
+            table1.add_column("Samples", justify="right", style="green")
+
+            # Add rows for each host
+            for host_stat in sorted(agg_stats.host_stats, key=lambda h: h.host):
+                table1.add_row(
+                    host_stat.host,
+                    self._format_ber(host_stat.min_ber),
+                    self._format_ber(host_stat.avg_ber),
+                    self._format_ber(host_stat.max_ber),
+                    str(host_stat.sample_count),
+                )
+
+            # Table 2: Statistics of Host Statistics
+            table2 = Table(
+                title="Statistics of Host Statistics",
+                show_header=True,
+                header_style="bold cyan",
+            )
+
+            table2.add_column("Metric", style="dim")
+            table2.add_column("Minimum", justify="right")
+            table2.add_column("Average", justify="right")
+            table2.add_column("Maximum", justify="right")
+
+            # Add rows for MIN, AVG, MAX statistics
+            table2.add_row(
+                "MIN",
+                self._format_ber(agg_stats.min_of_mins),
+                self._format_ber(agg_stats.avg_of_mins),
+                self._format_ber(agg_stats.max_of_mins),
+            )
+            table2.add_row(
+                "AVG",
+                self._format_ber(agg_stats.min_of_avgs),
+                self._format_ber(agg_stats.avg_of_avgs),
+                self._format_ber(agg_stats.max_of_avgs),
+            )
+            table2.add_row(
+                "MAX",
+                self._format_ber(agg_stats.min_of_maxs),
+                self._format_ber(agg_stats.avg_of_maxs),
+                self._format_ber(agg_stats.max_of_maxs),
+            )
+
+            # Footer
+            speeds_str = ", ".join(str(s) for s in agg_stats.train_speeds) if agg_stats.train_speeds else "all"
+            total_samples = sum(h.sample_count for h in agg_stats.host_stats)
+            footer = (
+                f"Systems: {agg_stats.num_systems}  |  "
+                f"Total Samples: {total_samples}  |  "
+                f"Speeds: {speeds_str}"
+            )
+
+            # Render both tables with spacing
+            with self.console.capture() as capture:
+                self.console.print(table1)
+                self.console.print()  # Blank line
+                self.console.print(table2)
+                self.console.print()  # Blank line
+                self.console.print(footer, style="dim")
+
+            output_sections.append(capture.get())
+
+        # Join all sections with double blank lines if multiple lanes
+        return "\n\n".join(output_sections)
+
 
 class HeatMapRenderer:
     """Render query results as heat maps with configurable color schemes."""
@@ -332,7 +433,7 @@ class HeatMapRenderer:
 
         Args:
             stats: BER statistics to visualize
-            metric: "min", "max", "avg", or "high_ber"
+            metric: "min", "max", "avg" (with variance indicators), or "high_ber"
             color_scheme: Override instance color scheme
 
         Returns:
@@ -450,9 +551,7 @@ class HeatMapRenderer:
                     value = lane_stat.max_ber
                 elif metric == "avg":
                     value = lane_stat.avg_ber
-                elif metric == "variance":
-                    value = lane_stat.avg_ber  # Use avg for coloring
-                    # Calculate variance indicator for later use
+                    # Calculate variance indicator for avg mode
                     variance_symbol = calculate_variance_indicator(
                         lane_stat.min_ber,
                         lane_stat.avg_ber,
@@ -465,14 +564,14 @@ class HeatMapRenderer:
                 if key not in grouped:
                     grouped[key] = {}
 
-                # Store both value and variance symbol if in variance mode
-                if metric == "variance":
+                # Store both value and variance symbol if in avg mode
+                if metric == "avg":
                     grouped[key][lane_num] = (value, variance_symbol)
                 else:
                     grouped[key][lane_num] = value
 
-        if metric == "variance":
-            title = "BER Statistics - VARIANCE Heatmap (Average with Consistency Indicators)"
+        if metric == "avg":
+            title = "BER Statistics - AVG Heatmap (with Variance Indicators)"
         else:
             title = f"BER Statistics - {metric.upper()} Heatmap"
         lines = [title, ""]
@@ -488,8 +587,8 @@ class HeatMapRenderer:
             for lane_num in range(8):
                 lane_data = lane_values.get(lane_num)
 
-                # Handle variance mode (tuple) vs regular mode (single value)
-                if metric == "variance" and lane_data is not None:
+                # Handle avg mode (tuple with variance) vs regular mode (single value)
+                if metric == "avg" and lane_data is not None:
                     value, variance_symbol = lane_data
                 else:
                     value = lane_data
@@ -503,8 +602,8 @@ class HeatMapRenderer:
                         style = color
                     else:
                         # For BER metrics, show as missing data
-                        # 7 chars for regular BER, 9 chars for variance (includes symbol)
-                        if metric == "variance":
+                        # 7 chars for regular BER, 9 chars for avg (includes symbol)
+                        if metric == "avg":
                             value_str = "    -    "  # 9 chars
                         else:
                             value_str = "   -   "    # 7 chars
@@ -520,7 +619,7 @@ class HeatMapRenderer:
                     color = self._get_color_for_value(value, scheme)
                     style = color
 
-                    # Append variance symbol if in variance mode
+                    # Append variance symbol if in avg mode
                     if variance_symbol:
                         value_str = f"{value_str} {variance_symbol}"
 
@@ -531,7 +630,7 @@ class HeatMapRenderer:
 
         # Add legend
         lines.append("")
-        if metric == "variance":
+        if metric == "avg":
             # Show both BER color legend and variance legend
             lines.append(self._format_ber_legend(scheme))
             lines.append("")
@@ -648,3 +747,121 @@ class HeatMapRenderer:
             "  ▲  Moderate Variance (10-100)        ■  High Variance (100-1000)\n"
             "  ✕  Extreme Spikes (≥ 1000)"
         )
+
+    def render_ber_histogram(
+        self,
+        histogram: Union[BERHistogram, List[BERHistogram]],
+        max_bar_width: int = 50,
+    ) -> str:
+        """Render BER histogram(s) for terminal.
+
+        Args:
+            histogram: Single histogram or list of histograms
+            max_bar_width: Maximum width of bars in characters
+
+        Returns:
+            Formatted histogram string with ANSI colors
+        """
+        # Normalize to list for uniform processing
+        histograms = [histogram] if isinstance(histogram, BERHistogram) else histogram
+
+        if not histograms:
+            return "No histogram data available"
+
+        # Determine if we're showing multiple lanes from same port
+        is_multi_lane = len(histograms) > 1
+
+        lines = []
+
+        # Title
+        if is_multi_lane:
+            # Extract common prefix (bus_id/eth_id)
+            first_lane_id = histograms[0].lane_id
+            parts = first_lane_id.split("/")
+            if len(parts) >= 2:
+                common_prefix = f"{parts[0]}/{parts[1]}"
+                lines.append(f"BER Histograms - {common_prefix} (all lanes)")
+            else:
+                lines.append("BER Histograms")
+        else:
+            lines.append(f"BER Histogram - {histograms[0].lane_id}")
+
+        lines.append("")
+
+        # Find max count across all histograms for scaling
+        max_count = 0
+        for hist in histograms:
+            for _, count in hist.bins:
+                max_count = max(max_count, count)
+
+        # Render each histogram
+        for i, hist in enumerate(histograms):
+            if is_multi_lane:
+                # Extract lane number
+                lane_num = hist.lane_id.split("/")[-1].replace("lane", "")
+                lines.append(f"Lane {lane_num}:")
+
+            # Render bins
+            for bin_label, count in hist.bins:
+                # Calculate bar width (proportional to count)
+                if max_count > 0:
+                    bar_width = int((count / max_count) * max_bar_width)
+                else:
+                    bar_width = 0
+
+                # Determine color based on BER range (using bin label)
+                color = self._get_histogram_bar_color(bin_label)
+
+                # Format bin label (right-aligned for alignment)
+                label_str = f"{bin_label:>10}"
+
+                # Create bar
+                bar = "█" * bar_width if bar_width > 0 else ""
+
+                # Format count
+                count_str = str(count)
+
+                # Add line with color
+                lines.append(f"  {label_str}   [{color}]{bar}[/] {count_str}")
+
+            # Add separator between lanes (except after last lane)
+            if is_multi_lane and i < len(histograms) - 1:
+                lines.append("")
+
+        # Add metadata footer
+        lines.append("")
+        # Use first histogram's metadata (should be same for all from same query)
+        total_samples = sum(hist.num_tests for hist in histograms)
+        num_systems = histograms[0].num_systems
+        speeds_str = ", ".join(str(s) for s in histograms[0].train_speeds) if histograms[0].train_speeds else "all"
+        lines.append(
+            f"Total Samples: {total_samples}  |  Systems: {num_systems}  |  Speeds: {speeds_str}"
+        )
+
+        # Render with Rich console
+        with self.console.capture() as capture:
+            for line in lines:
+                self.console.print(line)
+
+        return capture.get()
+
+    def _get_histogram_bar_color(self, bin_label: str) -> str:
+        """Get color for histogram bar based on bin label.
+
+        Args:
+            bin_label: Bin range label (e.g., "< 1e-12", "1e-12-11")
+
+        Returns:
+            Rich color name
+        """
+        # Map bin labels to colors (green for low BER, red for high)
+        if "< 1e-12" in bin_label:
+            return GREEN
+        elif "1e-12-11" in bin_label or "1e-11-10" in bin_label:
+            return YELLOW_GREEN
+        elif "1e-10-9" in bin_label or "1e-9-8" in bin_label:
+            return YELLOW
+        elif "1e-8-7" in bin_label or "1e-7-6" in bin_label:
+            return ORANGE
+        else:  # High BER bins
+            return RED

@@ -7,7 +7,7 @@ and result dataclasses for BER statistics and failure counts.
 import logging
 import re
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Union
 
 import pandas as pd
 
@@ -114,6 +114,79 @@ class TrainingFailureCounts:
     train_speeds: List[int]
 
 
+@dataclass
+class BERHistogram:
+    """BER histogram result.
+
+    Attributes:
+        lane_id: Full lane identifier (e.g., "01:00.0/ETH07/lane4")
+        bins: List of (range_label, count) tuples for each bin
+        num_tests: Total number of tests included
+        num_systems: Number of unique systems
+        train_speeds: List of speeds included
+    """
+
+    lane_id: str
+    bins: List[Tuple[str, int]]
+    num_tests: int
+    num_systems: int
+    train_speeds: List[int]
+
+
+@dataclass
+class HostBERStats:
+    """BER statistics for a single host.
+
+    Attributes:
+        host: Hostname
+        min_ber: Minimum BER across all samples for this host
+        avg_ber: Average BER across all samples for this host
+        max_ber: Maximum BER across all samples for this host
+        sample_count: Number of samples for this host
+    """
+
+    host: str
+    min_ber: Optional[float]
+    avg_ber: Optional[float]
+    max_ber: Optional[float]
+    sample_count: int
+
+
+@dataclass
+class AggregatedHostStats:
+    """Statistics of host statistics.
+
+    Attributes:
+        lane_id: Lane identifier
+        host_stats: List of per-host statistics
+        min_of_mins: Minimum of all host min values
+        avg_of_mins: Average of all host min values
+        max_of_mins: Maximum of all host min values
+        min_of_avgs: Minimum of all host avg values
+        avg_of_avgs: Average of all host avg values
+        max_of_avgs: Maximum of all host avg values
+        min_of_maxs: Minimum of all host max values
+        avg_of_maxs: Average of all host max values
+        max_of_maxs: Maximum of all host max values
+        num_systems: Number of systems included
+        train_speeds: List of speeds included
+    """
+
+    lane_id: str
+    host_stats: List[HostBERStats]
+    min_of_mins: Optional[float]
+    avg_of_mins: Optional[float]
+    max_of_mins: Optional[float]
+    min_of_avgs: Optional[float]
+    avg_of_avgs: Optional[float]
+    max_of_avgs: Optional[float]
+    min_of_maxs: Optional[float]
+    avg_of_maxs: Optional[float]
+    max_of_maxs: Optional[float]
+    num_systems: int
+    train_speeds: List[int]
+
+
 class LaneSelector:
     """Specifies which serdes lanes to query.
 
@@ -123,16 +196,20 @@ class LaneSelector:
     Supported formats:
         - "all" -> All lanes on all systems
         - "01:00.0/ETH07" -> Specific port (all lanes)
+        - "01:00.0/ETH07/4" -> Specific lane on specific port
         - "01:00.0/*" -> All ports on bus_id
         - "bh-glx-c02u02/01:00.0/ETH07" -> Specific system and port
+        - "bh-glx-c02u02/01:00.0/ETH07/4" -> Specific lane on specific system
         - "bh-glx-c02u02/*" -> All ports on system
         - "*/ETH07" -> ETH07 on all systems
+        - "*/ETH07/4" -> Lane 4 on ETH07 across all systems
 
     Attributes:
         spec: Original specification string
         host: Host filter (None = all hosts, "*" = wildcard, specific hostname)
         bus_id: Bus ID filter (None = all, "*" = wildcard, specific bus_id)
         eth_id: Ethernet port filter (None = all, "*" = wildcard, specific eth_id)
+        lane_num: Lane number filter (None = all lanes, 0-7 = specific lane)
     """
 
     def __init__(
@@ -140,6 +217,7 @@ class LaneSelector:
         host: Optional[str] = None,
         bus_id: Optional[str] = None,
         eth_id: Optional[str] = None,
+        lane_num: Optional[int] = None,
     ):
         """Initialize lane selector.
 
@@ -147,10 +225,12 @@ class LaneSelector:
             host: Host filter pattern
             bus_id: Bus ID filter pattern
             eth_id: Ethernet port filter pattern
+            lane_num: Lane number (0-7) or None for all lanes
         """
         self.host = host
         self.bus_id = bus_id
         self.eth_id = eth_id
+        self.lane_num = lane_num
         self.spec = self._build_spec()
 
     def _build_spec(self) -> str:
@@ -163,7 +243,10 @@ class LaneSelector:
             # If only host is set (no bus_id, no eth_id), return host/*
             if not self.bus_id and not self.eth_id:
                 parts.append("*")
-                return "/".join(parts)
+                spec = "/".join(parts)
+                if self.lane_num is not None:
+                    spec += f"/{self.lane_num}"
+                return spec
 
         # Handle bus_id
         if self.bus_id and self.bus_id != "*":
@@ -175,14 +258,23 @@ class LaneSelector:
         if self.eth_id and self.eth_id != "*":
             # Special case: */eth_id format (no host, no bus_id)
             if not self.host and not self.bus_id:
-                return f"*/{self.eth_id}"
+                spec = f"*/{self.eth_id}"
+                if self.lane_num is not None:
+                    spec += f"/{self.lane_num}"
+                return spec
             parts.append(self.eth_id)
         elif self.eth_id == "*":
             parts.append("*")
         elif self.bus_id:  # Only add wildcard if bus_id was set
             parts.append("*")
 
-        return "/".join(parts) if parts else "all"
+        spec = "/".join(parts) if parts else "all"
+
+        # Add lane number if specified
+        if self.lane_num is not None and parts:
+            spec += f"/{self.lane_num}"
+
+        return spec
 
     @classmethod
     def from_spec(cls, spec: str) -> "LaneSelector":
@@ -200,10 +292,13 @@ class LaneSelector:
         Examples:
             "all" -> All lanes on all systems
             "01:00.0/ETH07" -> Specific port
+            "01:00.0/ETH07/4" -> Specific lane on specific port
             "01:00.0/*" -> All ports on bus_id
             "bh-glx-c02u02/01:00.0/ETH07" -> Specific system and port
+            "bh-glx-c02u02/01:00.0/ETH07/4" -> Specific lane on specific system
             "bh-glx-c02u02/*" -> All ports on system
             "*/ETH07" -> ETH07 on all systems
+            "*/ETH07/4" -> Lane 4 on ETH07 across all systems
         """
         spec = spec.strip()
 
@@ -213,7 +308,7 @@ class LaneSelector:
 
         # Handle "all" special case
         if spec.lower() == "all":
-            return cls(host=None, bus_id=None, eth_id=None)
+            return cls(host=None, bus_id=None, eth_id=None, lane_num=None)
 
         # Split by "/" and validate
         parts = spec.split("/")
@@ -221,6 +316,31 @@ class LaneSelector:
         # Check for empty parts (e.g., "//", "/foo", "foo/")
         if any(not part for part in parts):
             raise LaneSelectorError(f"Invalid lane specification format: {spec}", spec=spec)
+
+        # Helper function to extract and validate lane number
+        def extract_lane_num(part: str) -> Optional[int]:
+            """Extract lane number from last part if it's a digit."""
+            try:
+                lane = int(part)
+                if 0 <= lane <= 7:
+                    return lane
+                else:
+                    raise LaneSelectorError(
+                        f"Lane number must be 0-7, got {lane}",
+                        spec=spec
+                    )
+            except ValueError:
+                return None
+
+        # Check if the last part is a lane number
+        # Only extract lane number if we have 3 or 4 parts (not 2)
+        # This prevents "01:00.0/7" from being interpreted as lane 7
+        lane_num = None
+        if len(parts) >= 3:
+            potential_lane = extract_lane_num(parts[-1])
+            if potential_lane is not None:
+                lane_num = potential_lane
+                parts = parts[:-1]  # Remove lane number from parts
 
         if len(parts) == 1:
             # Single part must be a valid bus_id (not hostname alone)
@@ -233,7 +353,7 @@ class LaneSelector:
             # Try to parse as bus_id
             try:
                 normalized_bus_id = normalize_bus_id(part)
-                return cls(host=None, bus_id=normalized_bus_id, eth_id=None)
+                return cls(host=None, bus_id=normalized_bus_id, eth_id=None, lane_num=lane_num)
             except ValueError as e:
                 # Not a valid bus_id format
                 raise LaneSelectorError(
@@ -252,7 +372,7 @@ class LaneSelector:
                     raise LaneSelectorError("Invalid specification: */* is ambiguous. Use 'all' instead.", spec=spec)
                 try:
                     normalized_eth_id = normalize_eth_port(second)
-                    return cls(host=None, bus_id=None, eth_id=normalized_eth_id)
+                    return cls(host=None, bus_id=None, eth_id=normalized_eth_id, lane_num=lane_num)
                 except Exception as e:
                     raise LaneSelectorError(f"Invalid eth_id format: {second}", spec=spec) from e
 
@@ -272,13 +392,13 @@ class LaneSelector:
                 else:
                     normalized_eth_id = None
 
-                return cls(host=None, bus_id=normalized_bus_id, eth_id=normalized_eth_id)
+                return cls(host=None, bus_id=normalized_bus_id, eth_id=normalized_eth_id, lane_num=lane_num)
 
             # If second contains ":", it's host/bus_id
             if ":" in second:
                 try:
                     normalized_bus_id = normalize_bus_id(second)
-                    return cls(host=first, bus_id=normalized_bus_id, eth_id=None)
+                    return cls(host=first, bus_id=normalized_bus_id, eth_id=None, lane_num=lane_num)
                 except Exception as e:
                     raise LaneSelectorError(f"Invalid bus_id format: {second}", spec=spec) from e
 
@@ -290,16 +410,16 @@ class LaneSelector:
                 # Try bus_id first
                 try:
                     normalized_bus_id = normalize_bus_id(first)
-                    return cls(host=None, bus_id=normalized_bus_id, eth_id=None)
+                    return cls(host=None, bus_id=normalized_bus_id, eth_id=None, lane_num=lane_num)
                 except ValueError:
                     # Not a valid bus_id, treat as host/*
-                    return cls(host=first, bus_id=None, eth_id=None)
+                    return cls(host=first, bus_id=None, eth_id=None, lane_num=lane_num)
             else:
                 # second is a specific eth_id, so first must be a valid bus_id
                 try:
                     normalized_bus_id = normalize_bus_id(first)
                     normalized_eth_id = normalize_eth_port(second)
-                    return cls(host=None, bus_id=normalized_bus_id, eth_id=normalized_eth_id)
+                    return cls(host=None, bus_id=normalized_bus_id, eth_id=normalized_eth_id, lane_num=lane_num)
                 except ValueError as e:
                     raise LaneSelectorError(
                         f"Invalid bus_id format: {first}. For hostname patterns, use 'host/*' format.",
@@ -330,13 +450,22 @@ class LaneSelector:
             else:
                 normalized_eth_id = None
 
-            return cls(host=host if host != "*" else None, bus_id=normalized_bus_id, eth_id=normalized_eth_id)
+            return cls(host=host if host != "*" else None, bus_id=normalized_bus_id, eth_id=normalized_eth_id, lane_num=lane_num)
+
+        elif len(parts) == 4:
+            # This case is already handled by lane number extraction above
+            # Should not reach here
+            raise LaneSelectorError(f"Invalid lane specification format: {spec}", spec=spec)
 
         else:
             raise LaneSelectorError(f"Invalid lane specification format: {spec}", spec=spec)
 
     def to_sql_filter(self) -> Tuple[str, tuple]:
         """Generate SQL WHERE clause for this selector.
+
+        Note: Lane filtering is NOT included in SQL WHERE clause as it requires
+        column-level filtering (selecting specific acc_ber_lane# columns).
+        Use get_lane_columns() to determine which columns to query.
 
         Returns:
             Tuple of (where_clause, params) for parameterized query
@@ -362,12 +491,32 @@ class LaneSelector:
             conditions.append("eth_id = ?")
             params.append(self.eth_id)
 
+        # Note: lane_num filtering happens at column selection level, not WHERE clause
+
         if conditions:
             where_clause = " AND ".join(conditions)
         else:
             where_clause = "1=1"  # Always true (select all)
 
         return where_clause, tuple(params)
+
+    def get_lane_columns(self, all_lane_columns: List[str]) -> List[str]:
+        """Get list of lane columns to query based on lane_num filter.
+
+        Args:
+            all_lane_columns: Full list of lane column names
+
+        Returns:
+            Filtered list of lane columns (single column if lane_num specified,
+            all columns if lane_num is None)
+        """
+        if self.lane_num is not None:
+            # Return only the specific lane column
+            lane_col = f"acc_ber_lane{self.lane_num}"
+            return [lane_col] if lane_col in all_lane_columns else []
+        else:
+            # Return all lane columns
+            return all_lane_columns
 
     def __str__(self) -> str:
         """String representation."""
@@ -382,6 +531,8 @@ class LaneSelector:
             parts.append(f"bus_id={self.bus_id}")
         if self.eth_id:
             parts.append(f"eth_id={self.eth_id}")
+        if self.lane_num is not None:
+            parts.append(f"lane_num={self.lane_num}")
 
         if parts:
             return f"LaneSelector({', '.join(parts)})"
@@ -764,4 +915,293 @@ class QueryEngine:
         except Exception as e:
             raise QueryError(
                 f"Failed to query training failures: {e}", lane_spec=str(lane_selector)
+            ) from e
+
+    def query_ber_histogram(
+        self,
+        lane_selector: LaneSelector,
+        train_speeds: Optional[List[int]] = None,
+    ) -> Union[BERHistogram, List[BERHistogram]]:
+        """Generate BER histogram for lane(s).
+
+        Args:
+            lane_selector: Lane specification (supports single lane or multiple lanes)
+            train_speeds: Filter by speeds (None = all)
+
+        Returns:
+            Single BERHistogram if single lane specified,
+            List[BERHistogram] if multiple lanes (e.g., all 8 lanes on a port)
+
+        Raises:
+            QueryError: If query fails
+        """
+        try:
+            # Build query
+            where_clause, params = lane_selector.to_sql_filter()
+
+            # Add speed filter
+            if train_speeds:
+                speed_placeholders = ", ".join(["?" for _ in train_speeds])
+                where_clause += f" AND train_speed IN ({speed_placeholders})"
+                params = params + tuple(train_speeds)
+
+            # Always exclude training failures (no BER data)
+            where_clause += " AND test_status != 'TRAINING_FAIL'"
+
+            query = f"SELECT * FROM prbs_tests WHERE {where_clause}"
+
+            # Execute query
+            df = self.db.execute_query(query, params)
+
+            if df.empty:
+                logger.warning(f"No data found for lane selector: {lane_selector}")
+                # Return empty histogram(s)
+                lane_columns = lane_selector.get_lane_columns(self.LANE_COLUMNS)
+                if lane_selector.lane_num is not None:
+                    # Single lane requested
+                    return BERHistogram(
+                        lane_id=f"{lane_selector.spec}",
+                        bins=[],
+                        num_tests=0,
+                        num_systems=0,
+                        train_speeds=train_speeds or [],
+                    )
+                else:
+                    # Multiple lanes requested
+                    return []
+
+            # Define histogram bins (logarithmic scale)
+            bins = [
+                ("< 1e-12", 0, 1e-12),
+                ("1e-12-11", 1e-12, 1e-11),
+                ("1e-11-10", 1e-11, 1e-10),
+                ("1e-10-9", 1e-10, 1e-9),
+                ("1e-9-8", 1e-9, 1e-8),
+                ("1e-8-7", 1e-8, 1e-7),
+                ("1e-7-6", 1e-7, 1e-6),
+                ("1e-6-5", 1e-6, 1e-5),
+                ("1e-5-4", 1e-5, 1e-4),
+                (">= 1e-4", 1e-4, float("inf")),
+            ]
+
+            # Get lane columns to process
+            lane_columns = lane_selector.get_lane_columns(self.LANE_COLUMNS)
+
+            # Metadata
+            num_systems = df["host"].nunique()
+            speeds = sorted(df["train_speed"].unique().tolist())
+
+            # Build histograms for each lane
+            histograms = []
+
+            for lane_col in lane_columns:
+                lane_num = int(lane_col.replace("acc_ber_lane", ""))
+
+                # Process each unique bus_id/eth_id combination
+                for (bus_id, eth_id), group in df.groupby(["bus_id", "eth_id"]):
+                    lane_id = f"{bus_id}/{eth_id}/lane{lane_num}"
+
+                    # Get BER values for this lane
+                    lane_values = group[lane_col].dropna()
+
+                    if lane_values.empty:
+                        continue
+
+                    # Calculate histogram
+                    bin_counts = []
+                    for label, low, high in bins:
+                        if high == float("inf"):
+                            count = (lane_values >= low).sum()
+                        else:
+                            count = ((lane_values >= low) & (lane_values < high)).sum()
+                        bin_counts.append((label, int(count)))
+
+                    num_tests = len(lane_values)
+
+                    histograms.append(
+                        BERHistogram(
+                            lane_id=lane_id,
+                            bins=bin_counts,
+                            num_tests=num_tests,
+                            num_systems=num_systems,
+                            train_speeds=speeds,
+                        )
+                    )
+
+            # Return single histogram or list based on lane_num specification
+            if lane_selector.lane_num is not None and len(histograms) == 1:
+                return histograms[0]
+            else:
+                return histograms
+
+        except Exception as e:
+            raise QueryError(
+                f"Failed to query BER histogram: {e}", lane_spec=str(lane_selector)
+            ) from e
+
+    def query_aggregated_host_stats(
+        self,
+        lane_selector: LaneSelector,
+        train_speeds: Optional[List[int]] = None,
+    ) -> Union[AggregatedHostStats, List[AggregatedHostStats]]:
+        """Calculate aggregated host statistics.
+
+        First computes per-host BER statistics (min/avg/max), then
+        computes statistics of those statistics across all hosts.
+
+        Args:
+            lane_selector: Lane specification
+            train_speeds: Filter by speeds (None = all)
+
+        Returns:
+            Single AggregatedHostStats if single lane specified,
+            List[AggregatedHostStats] if multiple lanes
+
+        Raises:
+            QueryError: If query fails
+        """
+        try:
+            # Build query
+            where_clause, params = lane_selector.to_sql_filter()
+
+            # Add speed filter
+            if train_speeds:
+                speed_placeholders = ", ".join(["?" for _ in train_speeds])
+                where_clause += f" AND train_speed IN ({speed_placeholders})"
+                params = params + tuple(train_speeds)
+
+            # Always exclude training failures (no BER data)
+            where_clause += " AND test_status != 'TRAINING_FAIL'"
+
+            query = f"SELECT * FROM prbs_tests WHERE {where_clause}"
+
+            # Execute query
+            df = self.db.execute_query(query, params)
+
+            if df.empty:
+                logger.warning(f"No data found for lane selector: {lane_selector}")
+                # Return empty result(s)
+                lane_columns = lane_selector.get_lane_columns(self.LANE_COLUMNS)
+                if lane_selector.lane_num is not None:
+                    return AggregatedHostStats(
+                        lane_id=f"{lane_selector.spec}",
+                        host_stats=[],
+                        min_of_mins=None,
+                        avg_of_mins=None,
+                        max_of_mins=None,
+                        min_of_avgs=None,
+                        avg_of_avgs=None,
+                        max_of_avgs=None,
+                        min_of_maxs=None,
+                        avg_of_maxs=None,
+                        max_of_maxs=None,
+                        num_systems=0,
+                        train_speeds=train_speeds or [],
+                    )
+                else:
+                    return []
+
+            # Get lane columns to process
+            lane_columns = lane_selector.get_lane_columns(self.LANE_COLUMNS)
+
+            # Metadata
+            speeds = sorted(df["train_speed"].unique().tolist())
+
+            # Build aggregated stats for each lane
+            aggregated_stats_list = []
+
+            for lane_col in lane_columns:
+                lane_num = int(lane_col.replace("acc_ber_lane", ""))
+
+                # Process each unique bus_id/eth_id combination
+                for (bus_id, eth_id), group in df.groupby(["bus_id", "eth_id"]):
+                    lane_id = f"{bus_id}/{eth_id}/lane{lane_num}"
+
+                    # Calculate per-host statistics
+                    host_stats_list = []
+                    for host, host_group in group.groupby("host"):
+                        # Get BER values for this lane and host
+                        lane_values = host_group[lane_col].dropna()
+
+                        if not lane_values.empty:
+                            # Separate high BER values (>= 0.1) from normal values
+                            high_ber_mask = lane_values >= 0.1
+                            normal_values = lane_values[~high_ber_mask]
+
+                            if normal_values.empty:
+                                # All values are high BER
+                                host_stats_list.append(
+                                    HostBERStats(
+                                        host=host,
+                                        min_ber=None,
+                                        avg_ber=None,
+                                        max_ber=None,
+                                        sample_count=len(lane_values),
+                                    )
+                                )
+                            else:
+                                host_stats_list.append(
+                                    HostBERStats(
+                                        host=host,
+                                        min_ber=float(normal_values.min()),
+                                        avg_ber=float(normal_values.mean()),
+                                        max_ber=float(normal_values.max()),
+                                        sample_count=len(lane_values),
+                                    )
+                                )
+
+                    # Calculate statistics of statistics
+                    if host_stats_list:
+                        # Extract valid min/avg/max values (excluding None)
+                        mins = [h.min_ber for h in host_stats_list if h.min_ber is not None]
+                        avgs = [h.avg_ber for h in host_stats_list if h.avg_ber is not None]
+                        maxs = [h.max_ber for h in host_stats_list if h.max_ber is not None]
+
+                        # Calculate aggregated statistics
+                        min_of_mins = float(min(mins)) if mins else None
+                        avg_of_mins = float(sum(mins) / len(mins)) if mins else None
+                        max_of_mins = float(max(mins)) if mins else None
+
+                        min_of_avgs = float(min(avgs)) if avgs else None
+                        avg_of_avgs = float(sum(avgs) / len(avgs)) if avgs else None
+                        max_of_avgs = float(max(avgs)) if avgs else None
+
+                        min_of_maxs = float(min(maxs)) if maxs else None
+                        avg_of_maxs = float(sum(maxs) / len(maxs)) if maxs else None
+                        max_of_maxs = float(max(maxs)) if maxs else None
+
+                        num_systems = len(host_stats_list)
+                    else:
+                        min_of_mins = avg_of_mins = max_of_mins = None
+                        min_of_avgs = avg_of_avgs = max_of_avgs = None
+                        min_of_maxs = avg_of_maxs = max_of_maxs = None
+                        num_systems = 0
+
+                    aggregated_stats_list.append(
+                        AggregatedHostStats(
+                            lane_id=lane_id,
+                            host_stats=host_stats_list,
+                            min_of_mins=min_of_mins,
+                            avg_of_mins=avg_of_mins,
+                            max_of_mins=max_of_mins,
+                            min_of_avgs=min_of_avgs,
+                            avg_of_avgs=avg_of_avgs,
+                            max_of_avgs=max_of_avgs,
+                            min_of_maxs=min_of_maxs,
+                            avg_of_maxs=avg_of_maxs,
+                            max_of_maxs=max_of_maxs,
+                            num_systems=num_systems,
+                            train_speeds=speeds,
+                        )
+                    )
+
+            # Return single result or list based on lane_num specification
+            if lane_selector.lane_num is not None and len(aggregated_stats_list) == 1:
+                return aggregated_stats_list[0]
+            else:
+                return aggregated_stats_list
+
+        except Exception as e:
+            raise QueryError(
+                f"Failed to query aggregated host stats: {e}", lane_spec=str(lane_selector)
             ) from e
