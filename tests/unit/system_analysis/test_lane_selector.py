@@ -183,3 +183,89 @@ class TestLaneSelectorEdgeCases:
         """Test that trailing slash raises error."""
         with pytest.raises(LaneSelectorError):
             LaneSelector.from_spec("01:00.0/ETH07/")
+
+
+class TestLaneSelectorSpecRebuilding:
+    """Test that LaneSelector correctly rebuilds specification strings.
+
+    This ensures that the spec string is reconstructed correctly from
+    parsed components, which is important for debugging and logging.
+    """
+
+    def test_rebuild_host_wildcard(self):
+        """Test that 'host/*' is correctly rebuilt."""
+        selector = LaneSelector.from_spec("bh-glx-c02u02/*")
+        assert selector.spec == "bh-glx-c02u02/*"
+
+    def test_rebuild_bus_wildcard(self):
+        """Test that 'bus_id/*' is correctly rebuilt."""
+        selector = LaneSelector.from_spec("01:00.0/*")
+        assert selector.spec == "01:00.0/*"
+
+    def test_rebuild_host_bus_wildcard(self):
+        """Test that 'host/bus_id/*' is correctly rebuilt."""
+        selector = LaneSelector.from_spec("bh-glx-c02u02/01:00.0/*")
+        assert selector.spec == "bh-glx-c02u02/01:00.0/*"
+
+    def test_rebuild_host_bus_eth(self):
+        """Test that 'host/bus_id/eth_id' is correctly rebuilt."""
+        selector = LaneSelector.from_spec("bh-glx-c02u02/01:00.0/ETH07")
+        assert selector.spec == "bh-glx-c02u02/01:00.0/ETH07"
+
+    def test_rebuild_bus_eth(self):
+        """Test that 'bus_id/eth_id' is correctly rebuilt."""
+        selector = LaneSelector.from_spec("01:00.0/ETH07")
+        assert selector.spec == "01:00.0/ETH07"
+
+    def test_rebuild_wildcard_eth(self):
+        """Test that '*/eth_id' is correctly rebuilt."""
+        selector = LaneSelector.from_spec("*/ETH07")
+        assert selector.spec == "*/ETH07"
+
+    def test_rebuild_all(self):
+        """Test that 'all' is correctly rebuilt."""
+        selector = LaneSelector.from_spec("all")
+        assert selector.spec == "all"
+
+    def test_rebuild_normalized_bus_id(self):
+        """Test that normalized bus_id is used in rebuilt spec."""
+        # Input: "1/ETH07" should normalize to "01:00.0/ETH07"
+        selector = LaneSelector.from_spec("1/ETH07")
+        assert selector.spec == "01:00.0/ETH07"
+
+    def test_rebuild_normalized_eth_id(self):
+        """Test that normalized eth_id is used in rebuilt spec."""
+        # Input: "01:00.0/7" should normalize to "01:00.0/ETH07"
+        selector = LaneSelector.from_spec("01:00.0/7")
+        assert selector.spec == "01:00.0/ETH07"
+
+    def test_rebuild_preserves_semantics(self):
+        """Test that rebuilding preserves query semantics.
+
+        This test ensures that parsing a spec and rebuilding it
+        produces an equivalent spec that would generate the same
+        SQL filter.
+        """
+        original_specs = [
+            "bh-glx-c02u02/*",
+            "01:00.0/*",
+            "bh-glx-c02u02/01:00.0/*",
+            "*/ETH07",
+            "all",
+        ]
+
+        for original_spec in original_specs:
+            selector = LaneSelector.from_spec(original_spec)
+            rebuilt_spec = selector.spec
+
+            # Parse the rebuilt spec and compare SQL filters
+            rebuilt_selector = LaneSelector.from_spec(rebuilt_spec)
+
+            # Both should produce identical SQL filters
+            original_sql = selector.to_sql_filter()
+            rebuilt_sql = rebuilt_selector.to_sql_filter()
+
+            assert original_sql == rebuilt_sql, (
+                f"Spec rebuilding changed semantics for '{original_spec}': "
+                f"original={original_sql}, rebuilt={rebuilt_sql}"
+            )

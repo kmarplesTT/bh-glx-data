@@ -157,17 +157,29 @@ class LaneSelector:
         """Build specification string from patterns."""
         parts = []
 
+        # Handle host if specified
         if self.host and self.host != "*":
             parts.append(self.host)
+            # If only host is set (no bus_id, no eth_id), return host/*
+            if not self.bus_id and not self.eth_id:
+                parts.append("*")
+                return "/".join(parts)
 
+        # Handle bus_id
         if self.bus_id and self.bus_id != "*":
             parts.append(self.bus_id)
-        elif self.host or self.bus_id:
+        elif self.bus_id == "*":
             parts.append("*")
 
+        # Handle eth_id
         if self.eth_id and self.eth_id != "*":
+            # Special case: */eth_id format (no host, no bus_id)
+            if not self.host and not self.bus_id:
+                return f"*/{self.eth_id}"
             parts.append(self.eth_id)
-        elif parts:
+        elif self.eth_id == "*":
+            parts.append("*")
+        elif self.bus_id:  # Only add wildcard if bus_id was set
             parts.append("*")
 
         return "/".join(parts) if parts else "all"

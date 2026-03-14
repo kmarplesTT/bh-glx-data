@@ -19,7 +19,7 @@ Activate virtual environment to enable tools: `source .venv/bin/activate`
 6. Delete the unused csv files that were downloaded from Jira
 7. Summarize the info: `bh-analyze-systems info`
 8. Gather data on lanes that tend to perform poorly: `bh-analyze-systems custom all 1e-6 --format table`
-9. From the output of the previous command, if any standout gather that `max` and `variance` stats for those lanes
+9. From the output of the previous command, if any stand out gather that `max` and `variance` stats for those lanes
    - For example,
 
    ```bash
@@ -29,4 +29,4 @@ Activate virtual environment to enable tools: `source .venv/bin/activate`
 
    - Do this for all ports that stand out
 
-Generate a summary of important information from this process and store it in: `.claude/skilss/run-system-analysis/logs/`.
+Generate a summary of important information from this process and store it in: `.claude/skills/run-system-analysis/logs/`.
