@@ -497,9 +497,15 @@ class TestEdgeCases:
 
     def test_normalize_invalid_bus_id(self):
         """Test normalizing invalid bus ID."""
-        # These shouldn't raise, just return invalid format
-        result = normalize_bus_id("")
-        assert result == ":00.0"
+        # Invalid formats should raise ValueError
+        with pytest.raises(ValueError):
+            normalize_bus_id("")
+
+        with pytest.raises(ValueError):
+            normalize_bus_id("xyz")
+
+        with pytest.raises(ValueError):
+            normalize_bus_id("123")
 
     def test_get_chip_from_invalid_bus_id(self):
         """Test getting chip from invalid bus ID."""

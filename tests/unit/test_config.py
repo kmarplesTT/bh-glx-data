@@ -505,7 +505,8 @@ class TestConfigErrorHandling:
 
         manager = ConfigManager()
         with pytest.raises(ValidationError):
-            manager.load(load_env=True)
+            # Don't load .env file since we're testing missing env vars
+            manager.load(load_env=False)
 
     def test_error_on_invalid_yaml_syntax(self, tmp_config_dir, monkeypatch):
         """Test that invalid YAML raises ConfigurationError."""

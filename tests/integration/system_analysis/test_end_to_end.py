@@ -174,7 +174,7 @@ class TestEndToEndWorkflow:
         # Query all data
         engine = QueryEngine(test_db)
         selector = LaneSelector.from_spec("all")
-        stats = engine.query_ber_statistics(selector, exclude_training_failures=True)
+        stats = engine.query_ber_statistics(selector)
 
         assert stats.num_tests > 0
         assert stats.num_systems == 2

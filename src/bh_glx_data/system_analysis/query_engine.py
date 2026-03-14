@@ -211,29 +211,40 @@ class LaneSelector:
             raise LaneSelectorError(f"Invalid lane specification format: {spec}", spec=spec)
 
         if len(parts) == 1:
-            # Could be just host or just bus_id
+            # Single part must be a valid bus_id (not hostname alone)
             part = parts[0]
 
             # Wildcard-only is invalid
             if part == "*":
                 raise LaneSelectorError("Wildcard-only specification is invalid. Use 'all' instead.", spec=spec)
 
-            # Check if it looks like a bus_id (contains ":")
-            if ":" in part:
-                try:
-                    normalized_bus_id = normalize_bus_id(part)
-                    return cls(host=None, bus_id=normalized_bus_id, eth_id=None)
-                except Exception as e:
-                    raise LaneSelectorError(f"Invalid bus_id format: {part}", spec=spec) from e
-            else:
-                # Assume it's a hostname
-                return cls(host=part, bus_id=None, eth_id=None)
+            # Try to parse as bus_id
+            try:
+                normalized_bus_id = normalize_bus_id(part)
+                return cls(host=None, bus_id=normalized_bus_id, eth_id=None)
+            except ValueError as e:
+                # Not a valid bus_id format
+                raise LaneSelectorError(
+                    f"Invalid lane specification: '{part}'. Single-part specs must be 'all' or a valid bus_id. "
+                    f"Use 'host/*' or 'host/bus_id/eth_id' format for hostnames.",
+                    spec=spec
+                ) from e
 
         elif len(parts) == 2:
-            # Could be bus_id/eth_id or host/bus_id
+            # Could be bus_id/eth_id, host/bus_id, host/eth_id, or */eth_id
             first, second = parts
 
-            # If first contains ":", it's bus_id/eth_id
+            # Handle */eth_id case
+            if first == "*":
+                if second == "*":
+                    raise LaneSelectorError("Invalid specification: */* is ambiguous. Use 'all' instead.", spec=spec)
+                try:
+                    normalized_eth_id = normalize_eth_port(second)
+                    return cls(host=None, bus_id=None, eth_id=normalized_eth_id)
+                except Exception as e:
+                    raise LaneSelectorError(f"Invalid eth_id format: {second}", spec=spec) from e
+
+            # If first contains ":", it's definitely bus_id/eth_id
             if ":" in first:
                 try:
                     normalized_bus_id = normalize_bus_id(first)
@@ -250,27 +261,40 @@ class LaneSelector:
                     normalized_eth_id = None
 
                 return cls(host=None, bus_id=normalized_bus_id, eth_id=normalized_eth_id)
+
+            # If second contains ":", it's host/bus_id
+            if ":" in second:
+                try:
+                    normalized_bus_id = normalize_bus_id(second)
+                    return cls(host=first, bus_id=normalized_bus_id, eth_id=None)
+                except Exception as e:
+                    raise LaneSelectorError(f"Invalid bus_id format: {second}", spec=spec) from e
+
+            # Neither contains ":", could be bus_id/eth_id or host/*
+            # If second is a wildcard, first could be bus_id or host
+            # If second is a specific eth_id, first must be a valid bus_id
+            if second == "*":
+                # Could be bus_id/* or host/*
+                # Try bus_id first
+                try:
+                    normalized_bus_id = normalize_bus_id(first)
+                    return cls(host=None, bus_id=normalized_bus_id, eth_id=None)
+                except ValueError:
+                    # Not a valid bus_id, treat as host/*
+                    return cls(host=first, bus_id=None, eth_id=None)
             else:
-                # Otherwise it's host/bus_id or host/eth_id
-                # If second contains ":", it's host/bus_id
-                if ":" in second:
-                    try:
-                        normalized_bus_id = normalize_bus_id(second)
-                        return cls(host=first, bus_id=normalized_bus_id, eth_id=None)
-                    except Exception as e:
-                        raise LaneSelectorError(f"Invalid bus_id format: {second}", spec=spec) from e
-                else:
-                    # It's host/eth_id - wildcard or actual eth port
-                    if second != "*":
-                        # It's a specific eth_id
-                        try:
-                            normalized_eth_id = normalize_eth_port(second)
-                            return cls(host=first, bus_id=None, eth_id=normalized_eth_id)
-                        except Exception as e:
-                            raise LaneSelectorError(f"Invalid eth_id format: {second}", spec=spec) from e
-                    else:
-                        # It's host/*
-                        return cls(host=first, bus_id=None, eth_id=None)
+                # second is a specific eth_id, so first must be a valid bus_id
+                try:
+                    normalized_bus_id = normalize_bus_id(first)
+                    normalized_eth_id = normalize_eth_port(second)
+                    return cls(host=None, bus_id=normalized_bus_id, eth_id=normalized_eth_id)
+                except ValueError as e:
+                    raise LaneSelectorError(
+                        f"Invalid bus_id format: {first}. For hostname patterns, use 'host/*' format.",
+                        spec=spec
+                    ) from e
+                except Exception as e:
+                    raise LaneSelectorError(f"Invalid eth_id format: {second}", spec=spec) from e
 
         elif len(parts) == 3:
             # host/bus_id/eth_id

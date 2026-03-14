@@ -659,9 +659,29 @@ def normalize_bus_id(bus_id: str) -> str:
 
     Returns:
         Normalized bus ID string
+
+    Raises:
+        ValueError: If bus_id format is invalid
     """
     bus_id = bus_id.lower().strip()
     if ":" not in bus_id:
-        # Assume format like "01" and add ":00.0"
+        # Assume format like "01" or "1" and add ":00.0"
+        # Validate that it's 1-2 hex characters
+        if not (1 <= len(bus_id) <= 2 and all(c in '0123456789abcdef' for c in bus_id)):
+            raise ValueError(f"Invalid bus_id format: {bus_id}. Expected 1-2 hex digits.")
+        # Zero-pad single digit
+        if len(bus_id) == 1:
+            bus_id = f"0{bus_id}"
         bus_id = f"{bus_id}:00.0"
+    else:
+        # Validate format: XX:XX.X
+        parts = bus_id.split(":")
+        if len(parts) != 2:
+            raise ValueError(f"Invalid bus_id format: {bus_id}")
+        # Validate first part is 1-2 hex chars
+        if not (1 <= len(parts[0]) <= 2 and all(c in '0123456789abcdef' for c in parts[0])):
+            raise ValueError(f"Invalid bus_id format: {bus_id}. Bus number must be 1-2 hex digits.")
+        # Zero-pad single digit in first part
+        if len(parts[0]) == 1:
+            bus_id = f"0{parts[0]}:{parts[1]}"
     return bus_id
