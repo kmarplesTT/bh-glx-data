@@ -1,23 +1,26 @@
 """Export module for system analysis.
 
-This module provides Excel export functionality for database contents
-and query results with filtering and conditional formatting.
+This module provides Excel export functionality for query results with
+formatting and heatmap visualization.
 """
 
 import logging
 from dataclasses import dataclass
-from datetime import datetime
 from pathlib import Path
-from typing import List, Optional, Tuple, Union
-
-import pandas as pd
-from openpyxl import Workbook, load_workbook
-from openpyxl.styles import Font, PatternFill
-from openpyxl.utils import get_column_letter
+from typing import Dict, List, Optional, Union
 
 from bh_glx_data.core.exceptions import ExcelGenerationError
-from bh_glx_data.system_analysis.database import DatabaseManager
+from bh_glx_data.system_analysis.database import DatabaseManager, DatabaseStats
+from bh_glx_data.system_analysis.excel_formatters import (
+    create_or_open_workbook,
+    generate_unique_worksheet_name,
+    write_heatmap_to_worksheet,
+    write_histogram_to_worksheet,
+    write_table_to_worksheet,
+)
 from bh_glx_data.system_analysis.query_engine import (
+    AggregatedHostStats,
+    BERHistogram,
     BERStatistics,
     CustomThresholdCounts,
     ThresholdExceededCounts,
@@ -29,45 +32,47 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass
-class ExportFilters:
-    """Filters for database export.
+class ExcelExportResult:
+    """Result of an Excel export operation.
 
     Attributes:
-        hosts: Filter by hostnames
-        train_speeds: Filter by train speeds
-        test_status: Filter by test status values
-        date_range: Filter by date range (start_date, end_date)
-    """
-
-    hosts: Optional[List[str]] = None
-    train_speeds: Optional[List[int]] = None
-    test_status: Optional[List[str]] = None
-    date_range: Optional[Tuple[str, str]] = None
-
-
-@dataclass
-class ExportResult:
-    """Result of export operation.
-
-    Attributes:
-        rows_exported: Number of rows exported
-        sheets_created: Number of sheets created
-        file_size_bytes: Size of output file in bytes
         output_path: Path to output file
+        worksheet_name: Name of worksheet created
+        rows_written: Number of data rows written
+        file_existed: Whether file existed before export
     """
 
-    rows_exported: int
-    sheets_created: int
-    file_size_bytes: int
     output_path: Path
+    worksheet_name: str
+    rows_written: int
+    file_existed: bool
+
+
+def sanitize_worksheet_name(name: str) -> str:
+    r"""Sanitize worksheet name by replacing invalid Excel characters.
+
+    Excel doesn't allow these characters in worksheet names: : \ / ? * [ ]
+
+    Args:
+        name: Original worksheet name
+
+    Returns:
+        Sanitized worksheet name
+    """
+    # Replace invalid characters with underscore
+    invalid_chars = [":", "\\", "/", "?", "*", "[", "]"]
+    sanitized = name
+    for char in invalid_chars:
+        sanitized = sanitized.replace(char, "_")
+    return sanitized
 
 
 class ExcelExporter:
-    """Export database data to Excel files.
+    """Export query results to Excel files with formatting.
 
-    This class handles exporting full database contents or query results
-    to Excel with multiple sheets, formatting, and conditional formatting
-    for heatmap visualization.
+    This class handles exporting query results (stats, counts, histograms)
+    to Excel with tables and heatmaps, appending to existing files or
+    creating new ones.
 
     Attributes:
         db: DatabaseManager instance
@@ -81,26 +86,25 @@ class ExcelExporter:
         """
         self.db = db_manager
 
-    def export_full_database(
+    def export_ber_statistics(
         self,
+        stats: BERStatistics,
         output_path: Path,
-        filters: Optional[ExportFilters] = None,
-    ) -> ExportResult:
-        """Export entire database (or filtered subset) to Excel.
-
-        Creates Excel workbook with multiple sheets:
-        - Summary: Database statistics and metadata
-        - PRBS Tests: All PRBS test records
-        - Training Failures: Filtered view of training failures
-        - BER Exceeded: Filtered view of BER threshold exceeded
-        - Metadata: Ingestion history
+        lane_spec: str,
+        format: str = "table",
+        color_scheme: Optional[ColorScheme] = None,
+    ) -> ExcelExportResult:
+        """Export BER statistics to Excel (table or heatmap format).
 
         Args:
-            output_path: Path to output Excel file
-            filters: Optional filters (hosts, speeds, date ranges)
+            stats: BER statistics result from query
+            output_path: Path to Excel file
+            lane_spec: Lane specification string for worksheet name
+            format: "table" or "heatmap"
+            color_scheme: Optional color scheme for heatmap
 
         Returns:
-            ExportResult with export statistics
+            ExcelExportResult with export details
 
         Raises:
             ExcelGenerationError: If export fails
@@ -109,97 +113,95 @@ class ExcelExporter:
             output_path = Path(output_path)
             output_path.parent.mkdir(parents=True, exist_ok=True)
 
-            # Build filter clause
-            where_clause, params = self._build_filter_clause(filters)
+            # Create or open workbook
+            wb, file_existed = create_or_open_workbook(output_path)
 
-            # Create workbook
-            wb = Workbook()
+            # Generate worksheet name
+            base_name = f"Stats - {sanitize_worksheet_name(lane_spec)}"
+            ws_name = generate_unique_worksheet_name(wb, base_name)
+            ws = wb.create_sheet(ws_name)
 
-            # Remove default sheet
-            if "Sheet" in wb.sheetnames:
-                wb.remove(wb["Sheet"])
+            # Prepare metadata
+            metadata = {
+                "Total Samples": stats.num_tests,
+                "Unique Systems": stats.num_systems,
+                "Train Speeds": list(stats.train_speeds) if stats.train_speeds else "All",
+            }
 
-            sheets_created = 0
-            total_rows = 0
+            if format == "table":
+                # Prepare table data
+                data = self._prepare_ber_statistics_table_data(stats)
+                headers = ["Lane", "Min BER", "Avg BER", "Max BER", "High BER Count", "Samples"]
 
-            # Summary sheet
-            self._create_summary_sheet(wb, filters)
-            sheets_created += 1
+                # Define number formats for BER columns (scientific notation with 2 decimal places)
+                column_formats = {
+                    "Min BER": "0.00E+00",
+                    "Avg BER": "0.00E+00",
+                    "Max BER": "0.00E+00",
+                }
 
-            # PRBS Tests sheet (all data or filtered)
-            query = f"SELECT * FROM prbs_tests WHERE {where_clause}"
-            df_all = self.db.execute_query(query, params)
+                write_table_to_worksheet(
+                    ws,
+                    data,
+                    headers,
+                    title=f"BER Statistics - {lane_spec}",
+                    metadata=metadata,
+                    column_formats=column_formats,
+                )
+                rows_written = len(data["Lane"])
 
-            if not df_all.empty:
-                ws_all = wb.create_sheet("PRBS Tests")
-                self._write_dataframe_to_sheet(ws_all, df_all)
-                sheets_created += 1
-                total_rows += len(df_all)
+            else:  # heatmap
+                # For heatmap, we need a specific statistic (max, avg, min, high_ber, variance)
+                # This will be determined by the CLI; default to max
+                lane_data = {}
+                for lane_id, lane_stat in stats.lane_stats.items():
+                    # Default to max_ber for heatmap
+                    lane_data[lane_id] = lane_stat.max_ber
 
-            # Training Failures sheet
-            training_where = where_clause + " AND test_status = 'TRAINING_FAIL'"
-            training_query = f"SELECT * FROM prbs_tests WHERE {training_where}"
-            df_training = self.db.execute_query(training_query, params)
-
-            if not df_training.empty:
-                ws_training = wb.create_sheet("Training Failures")
-                self._write_dataframe_to_sheet(ws_training, df_training)
-                sheets_created += 1
-
-            # BER Exceeded sheet
-            ber_where = where_clause + " AND test_status = 'BER_THRESHOLD_EXCEEDED'"
-            ber_query = f"SELECT * FROM prbs_tests WHERE {ber_where}"
-            df_ber = self.db.execute_query(ber_query, params)
-
-            if not df_ber.empty:
-                ws_ber = wb.create_sheet("BER Exceeded")
-                self._write_dataframe_to_sheet(ws_ber, df_ber)
-                sheets_created += 1
-
-            # Ingestion Metadata sheet
-            metadata_df = self.db.execute_query("SELECT * FROM ingestion_metadata")
-            if not metadata_df.empty:
-                ws_metadata = wb.create_sheet("Ingestion Metadata")
-                self._write_dataframe_to_sheet(ws_metadata, metadata_df)
-                sheets_created += 1
+                write_heatmap_to_worksheet(
+                    ws,
+                    lane_data,
+                    color_scheme or ColorScheme(),  # Use default if none provided
+                    is_ber_metric=True,
+                    title=f"BER Statistics Heatmap - {lane_spec}",
+                    metadata=metadata,
+                )
+                rows_written = len(lane_data)
 
             # Save workbook
             wb.save(output_path)
 
-            # Get file size
-            file_size = output_path.stat().st_size
-
-            logger.info(f"Database exported to {output_path} ({total_rows} rows, {sheets_created} sheets)")
-
-            return ExportResult(
-                rows_exported=total_rows,
-                sheets_created=sheets_created,
-                file_size_bytes=file_size,
+            return ExcelExportResult(
                 output_path=output_path,
+                worksheet_name=ws_name,
+                rows_written=rows_written,
+                file_existed=file_existed,
             )
 
         except Exception as e:
             raise ExcelGenerationError(
-                f"Failed to export database: {e}",
-                output_path=str(output_path),
+                f"Failed to export BER statistics: {e}", output_path=str(output_path)
             ) from e
 
-    def export_query_result(
+    def export_count_data(
         self,
-        result: Union[BERStatistics, ThresholdExceededCounts, CustomThresholdCounts, TrainingFailureCounts],
+        counts: Union[ThresholdExceededCounts, CustomThresholdCounts, TrainingFailureCounts],
         output_path: Path,
-        format: str = "summary",
-    ) -> None:
-        """Export query result to Excel.
-
-        Formats:
-        - "summary": Formatted table with statistics
-        - "detailed": Include raw data behind the statistics (not implemented in MVP)
+        lane_spec: str,
+        format: str = "table",
+        color_scheme: Optional[ColorScheme] = None,
+    ) -> ExcelExportResult:
+        """Export count data to Excel (table or heatmap format).
 
         Args:
-            result: Query result to export
-            output_path: Path to output Excel file
-            format: Export format
+            counts: Count data result from query
+            output_path: Path to Excel file
+            lane_spec: Lane specification string for worksheet name
+            format: "table" or "heatmap"
+            color_scheme: Optional color scheme for heatmap
+
+        Returns:
+            ExcelExportResult with export details
 
         Raises:
             ExcelGenerationError: If export fails
@@ -208,318 +210,433 @@ class ExcelExporter:
             output_path = Path(output_path)
             output_path.parent.mkdir(parents=True, exist_ok=True)
 
-            wb = Workbook()
+            # Create or open workbook
+            wb, file_existed = create_or_open_workbook(output_path)
 
-            # Remove default sheet
-            if "Sheet" in wb.sheetnames:
-                wb.remove(wb["Sheet"])
+            # Determine command type for worksheet name
+            if isinstance(counts, ThresholdExceededCounts):
+                cmd_type = "Threshold"
+            elif isinstance(counts, CustomThresholdCounts):
+                cmd_type = "Custom"
+            elif isinstance(counts, TrainingFailureCounts):
+                cmd_type = "Training"
+            else:
+                cmd_type = "Counts"
 
-            # Create summary sheet based on result type
-            if isinstance(result, BERStatistics):
-                self._export_ber_statistics(wb, result)
-            elif isinstance(result, (ThresholdExceededCounts, CustomThresholdCounts, TrainingFailureCounts)):
-                self._export_counts(wb, result)
+            # Generate worksheet name
+            base_name = f"{cmd_type} - {sanitize_worksheet_name(lane_spec)}"
+            ws_name = generate_unique_worksheet_name(wb, base_name)
+            ws = wb.create_sheet(ws_name)
+
+            # Prepare metadata
+            metadata = {
+                "Total Count": counts.num_tests,
+                "Unique Systems": counts.num_systems,
+                "Train Speeds": list(counts.train_speeds) if counts.train_speeds else "All",
+            }
+
+            if isinstance(counts, CustomThresholdCounts):
+                metadata["Threshold"] = f"{counts.threshold:.2e}"
+
+            if format == "table":
+                # Prepare table data
+                data = {"Lane": [], "Count": []}
+                for lane_id in sorted(counts.lane_counts.keys()):
+                    data["Lane"].append(lane_id)
+                    data["Count"].append(counts.lane_counts[lane_id])
+
+                headers = ["Lane", "Count"]
+                write_table_to_worksheet(
+                    ws, data, headers, title=f"{cmd_type} Counts - {lane_spec}", metadata=metadata
+                )
+                rows_written = len(data["Lane"])
+
+            else:  # heatmap
+                write_heatmap_to_worksheet(
+                    ws,
+                    counts.lane_counts,
+                    color_scheme or ColorScheme(),
+                    is_ber_metric=False,
+                    title=f"{cmd_type} Counts Heatmap - {lane_spec}",
+                    metadata=metadata,
+                )
+                rows_written = len(counts.lane_counts)
 
             # Save workbook
             wb.save(output_path)
 
-            logger.info(f"Query result exported to {output_path}")
+            return ExcelExportResult(
+                output_path=output_path,
+                worksheet_name=ws_name,
+                rows_written=rows_written,
+                file_existed=file_existed,
+            )
 
         except Exception as e:
             raise ExcelGenerationError(
-                f"Failed to export query result: {e}",
-                output_path=str(output_path),
+                f"Failed to export count data: {e}", output_path=str(output_path)
             ) from e
 
-    def export_with_heatmap(
+    def export_histogram(
         self,
-        result: Union[BERStatistics, ThresholdExceededCounts, CustomThresholdCounts, TrainingFailureCounts],
+        histogram: Union[BERHistogram, List[BERHistogram]],
         output_path: Path,
-        color_scheme: Optional[ColorScheme] = None,
-    ) -> None:
-        """Export query result with conditional formatting as heatmap.
+        lane_spec: str,
+    ) -> ExcelExportResult:
+        """Export histogram(s) to Excel with column chart.
 
         Args:
-            result: Query result to export
-            output_path: Path to output Excel file
-            color_scheme: Color scheme for conditional formatting
+            histogram: BERHistogram or list of histograms
+            output_path: Path to Excel file
+            lane_spec: Lane specification string for worksheet name
+
+        Returns:
+            ExcelExportResult with export details
 
         Raises:
             ExcelGenerationError: If export fails
         """
         try:
-            # First export normally
-            self.export_query_result(result, output_path, format="summary")
+            output_path = Path(output_path)
+            output_path.parent.mkdir(parents=True, exist_ok=True)
 
-            # Then apply conditional formatting
-            wb = load_workbook(output_path)
+            # Create or open workbook
+            wb, file_existed = create_or_open_workbook(output_path)
 
-            if isinstance(result, BERStatistics):
-                self._apply_ber_heatmap_formatting(wb, result, color_scheme)
-            elif isinstance(result, (ThresholdExceededCounts, CustomThresholdCounts, TrainingFailureCounts)):
-                self._apply_count_heatmap_formatting(wb, result, color_scheme)
+            # Generate worksheet name
+            base_name = f"Histogram - {sanitize_worksheet_name(lane_spec)}"
+            ws_name = generate_unique_worksheet_name(wb, base_name)
+            ws = wb.create_sheet(ws_name)
 
+            # Normalize to list
+            histograms = [histogram] if isinstance(histogram, BERHistogram) else histogram
+
+            # Prepare metadata
+            total_samples = sum(sum(count for _, count in h.bins) for h in histograms)
+            unique_systems = len(
+                set(h.lane_id.split("/")[0] for h in histograms if "/" in h.lane_id)
+            )
+
+            metadata = {
+                "Total Samples": total_samples,
+                "Unique Systems": unique_systems if unique_systems > 0 else "N/A",
+                "Lanes Analyzed": len(histograms),
+            }
+
+            # Check if train_speeds available (from first histogram)
+            if histograms and hasattr(histograms[0], "train_speeds"):
+                metadata["Train Speeds"] = list(histograms[0].train_speeds)
+
+            # Write histogram
+            write_histogram_to_worksheet(
+                ws, histograms, title=f"BER Distribution - {lane_spec}", metadata=metadata
+            )
+
+            rows_written = sum(len(h.bins) for h in histograms)
+
+            # Save workbook
             wb.save(output_path)
 
-            logger.info(f"Heatmap exported to {output_path}")
+            return ExcelExportResult(
+                output_path=output_path,
+                worksheet_name=ws_name,
+                rows_written=rows_written,
+                file_existed=file_existed,
+            )
 
         except Exception as e:
             raise ExcelGenerationError(
-                f"Failed to export heatmap: {e}",
-                output_path=str(output_path),
+                f"Failed to export histogram: {e}", output_path=str(output_path)
             ) from e
 
-    def _build_filter_clause(self, filters: Optional[ExportFilters]) -> Tuple[str, tuple]:
-        """Build SQL WHERE clause from filters.
+    def export_advanced_stats(
+        self,
+        stats: Union[AggregatedHostStats, List[AggregatedHostStats]],
+        output_path: Path,
+        lane_spec: str,
+    ) -> ExcelExportResult:
+        """Export advanced statistics (two tables per lane).
 
         Args:
-            filters: Export filters
+            stats: AggregatedHostStats or list of stats
+            output_path: Path to Excel file
+            lane_spec: Lane specification string for worksheet name
 
         Returns:
-            Tuple of (where_clause, params)
+            ExcelExportResult with export details
+
+        Raises:
+            ExcelGenerationError: If export fails
         """
-        if filters is None:
-            return "1=1", ()
+        try:
+            output_path = Path(output_path)
+            output_path.parent.mkdir(parents=True, exist_ok=True)
 
-        conditions = []
-        params = []
+            # Create or open workbook
+            wb, file_existed = create_or_open_workbook(output_path)
 
-        if filters.hosts:
-            placeholders = ", ".join(["?" for _ in filters.hosts])
-            conditions.append(f"host IN ({placeholders})")
-            params.extend(filters.hosts)
+            # Generate worksheet name
+            base_name = f"Advanced Stats - {sanitize_worksheet_name(lane_spec)}"
+            ws_name = generate_unique_worksheet_name(wb, base_name)
+            ws = wb.create_sheet(ws_name)
 
-        if filters.train_speeds:
-            placeholders = ", ".join(["?" for _ in filters.train_speeds])
-            conditions.append(f"train_speed IN ({placeholders})")
-            params.extend(filters.train_speeds)
+            # Normalize to list
+            stats_list = [stats] if isinstance(stats, AggregatedHostStats) else stats
 
-        if filters.test_status:
-            placeholders = ", ".join(["?" for _ in filters.test_status])
-            conditions.append(f"test_status IN ({placeholders})")
-            params.extend(filters.test_status)
+            row = 1
+            rows_written = 0
 
-        if filters.date_range:
-            start_date, end_date = filters.date_range
-            conditions.append("date BETWEEN ? AND ?")
-            params.extend([start_date, end_date])
+            from openpyxl.styles import Font, PatternFill
 
-        if conditions:
-            where_clause = " AND ".join(conditions)
-        else:
-            where_clause = "1=1"
+            for agg_stats in stats_list:
+                # Title for this lane
+                ws.cell(row, 1, f"Advanced Statistics - {agg_stats.lane_id}")
+                ws.cell(row, 1).font = Font(bold=True, size=14)
+                row += 2
 
-        return where_clause, tuple(params)
+                # Table 1: Per-Host Statistics
 
-    def _create_summary_sheet(self, wb: Workbook, filters: Optional[ExportFilters]) -> None:
-        """Create summary sheet with database statistics.
-
-        Args:
-            wb: Workbook to add sheet to
-            filters: Filters applied (for display)
-        """
-        ws = wb.create_sheet("Summary")
-
-        # Get database stats
-        stats = self.db.get_database_stats()
-
-        # Write summary data
-        row = 1
-        ws.cell(row, 1, "Database Summary")
-        ws.cell(row, 1).font = Font(bold=True, size=14)
-        row += 2
-
-        ws.cell(row, 1, "Export Date:")
-        ws.cell(row, 2, datetime.now().isoformat())
-        row += 1
-
-        ws.cell(row, 1, "Total Tests:")
-        ws.cell(row, 2, stats.total_tests)
-        row += 1
-
-        ws.cell(row, 1, "Unique Systems:")
-        ws.cell(row, 2, stats.unique_hosts)
-        row += 1
-
-        ws.cell(row, 1, "Train Speeds:")
-        ws.cell(row, 2, ", ".join(str(s) for s in stats.unique_speeds))
-        row += 2
-
-        # Status breakdown
-        ws.cell(row, 1, "Status Breakdown:")
-        ws.cell(row, 1).font = Font(bold=True)
-        row += 1
-
-        for status, count in stats.status_breakdown.items():
-            ws.cell(row, 1, f"  {status}:")
-            ws.cell(row, 2, count)
-            row += 1
-
-        row += 1
-
-        # Filters (if any)
-        if filters:
-            ws.cell(row, 1, "Filters Applied:")
-            ws.cell(row, 1).font = Font(bold=True)
-            row += 1
-
-            if filters.hosts:
-                ws.cell(row, 1, "  Hosts:")
-                ws.cell(row, 2, ", ".join(filters.hosts))
+                ws.cell(row, 1, "Per-Host Statistics")
+                ws.cell(row, 1).font = Font(bold=True, size=12)
                 row += 1
 
-            if filters.train_speeds:
-                ws.cell(row, 1, "  Speeds:")
-                ws.cell(row, 2, ", ".join(str(s) for s in filters.train_speeds))
+                # Headers
+                headers = ["Host", "Min BER", "Avg BER", "Max BER", "Samples"]
+                for col, header in enumerate(headers, start=1):
+                    cell = ws.cell(row, col, header)
+                    cell.font = Font(bold=True)
+                    cell.fill = PatternFill(
+                        start_color="CCCCCC", end_color="CCCCCC", fill_type="solid"
+                    )
                 row += 1
 
-            if filters.test_status:
-                ws.cell(row, 1, "  Status:")
-                ws.cell(row, 2, ", ".join(filters.test_status))
+                # Data rows
+                for host_stat in sorted(agg_stats.host_stats, key=lambda h: h.host):
+                    ws.cell(row, 1, host_stat.host)
+
+                    # Min BER
+                    min_cell = ws.cell(row, 2)
+                    if host_stat.min_ber is not None:
+                        min_cell.value = host_stat.min_ber
+                        min_cell.number_format = "0.00E+00"
+                    else:
+                        min_cell.value = "-"
+
+                    # Avg BER
+                    avg_cell = ws.cell(row, 3)
+                    if host_stat.avg_ber is not None:
+                        avg_cell.value = host_stat.avg_ber
+                        avg_cell.number_format = "0.00E+00"
+                    else:
+                        avg_cell.value = "-"
+
+                    # Max BER
+                    max_cell = ws.cell(row, 4)
+                    if host_stat.max_ber is not None:
+                        max_cell.value = host_stat.max_ber
+                        max_cell.number_format = "0.00E+00"
+                    else:
+                        max_cell.value = "-"
+
+                    ws.cell(row, 5, host_stat.sample_count)
+                    row += 1
+                    rows_written += 1
+
+                row += 2  # Spacing
+
+                # Table 2: Statistics of Host Statistics
+                ws.cell(row, 1, "Statistics of Host Statistics")
+                ws.cell(row, 1).font = Font(bold=True, size=12)
                 row += 1
 
-        # Adjust column widths
-        ws.column_dimensions["A"].width = 20
-        ws.column_dimensions["B"].width = 40
+                # Headers
+                headers = ["Metric", "Minimum", "Average", "Maximum"]
+                for col, header in enumerate(headers, start=1):
+                    cell = ws.cell(row, col, header)
+                    cell.font = Font(bold=True)
+                    cell.fill = PatternFill(
+                        start_color="CCCCCC", end_color="CCCCCC", fill_type="solid"
+                    )
+                row += 1
 
-    def _write_dataframe_to_sheet(self, ws, df: pd.DataFrame) -> None:
-        """Write DataFrame to worksheet with formatting.
+                # Data rows
+                stats_data = [
+                    ("MIN", agg_stats.min_of_mins, agg_stats.avg_of_mins, agg_stats.max_of_mins),
+                    ("AVG", agg_stats.min_of_avgs, agg_stats.avg_of_avgs, agg_stats.max_of_avgs),
+                    ("MAX", agg_stats.min_of_maxs, agg_stats.avg_of_maxs, agg_stats.max_of_maxs),
+                ]
+                for metric, min_val, avg_val, max_val in stats_data:
+                    ws.cell(row, 1, metric)
+
+                    # Min value
+                    min_cell = ws.cell(row, 2)
+                    if min_val is not None:
+                        min_cell.value = min_val
+                        min_cell.number_format = "0.00E+00"
+                    else:
+                        min_cell.value = "-"
+
+                    # Avg value
+                    avg_cell = ws.cell(row, 3)
+                    if avg_val is not None:
+                        avg_cell.value = avg_val
+                        avg_cell.number_format = "0.00E+00"
+                    else:
+                        avg_cell.value = "-"
+
+                    # Max value
+                    max_cell = ws.cell(row, 4)
+                    if max_val is not None:
+                        max_cell.value = max_val
+                        max_cell.number_format = "0.00E+00"
+                    else:
+                        max_cell.value = "-"
+
+                    row += 1
+                    rows_written += 1
+
+                row += 3  # Spacing between lanes
+
+            # Add metadata summary at bottom
+            from bh_glx_data.system_analysis.excel_formatters import write_metadata_section
+
+            row += 2
+            total_samples = sum(hs.sample_count for s in stats_list for hs in s.host_stats)
+            unique_systems = len(set(hs.host for s in stats_list for hs in s.host_stats))
+
+            metadata = {
+                "Total Samples": total_samples,
+                "Unique Systems": unique_systems,
+            }
+            write_metadata_section(ws, row, metadata)
+
+            # Adjust column widths
+            ws.column_dimensions["A"].width = 20
+            for col in ["B", "C", "D"]:
+                ws.column_dimensions[col].width = 15
+            ws.column_dimensions["E"].width = 10
+
+            # Save workbook
+            wb.save(output_path)
+
+            return ExcelExportResult(
+                output_path=output_path,
+                worksheet_name=ws_name,
+                rows_written=rows_written,
+                file_existed=file_existed,
+            )
+
+        except Exception as e:
+            raise ExcelGenerationError(
+                f"Failed to export advanced stats: {e}", output_path=str(output_path)
+            ) from e
+
+    def export_database_info(
+        self,
+        info: DatabaseStats,
+        output_path: Path,
+    ) -> ExcelExportResult:
+        """Export database info to Excel.
 
         Args:
-            ws: Worksheet to write to
-            df: DataFrame to write
+            info: DatabaseStats with database metadata
+            output_path: Path to Excel file
+
+        Returns:
+            ExcelExportResult with export details
+
+        Raises:
+            ExcelGenerationError: If export fails
         """
-        # Write headers
-        for col_idx, col_name in enumerate(df.columns, start=1):
-            cell = ws.cell(1, col_idx, col_name)
-            cell.font = Font(bold=True)
-            cell.fill = PatternFill(start_color="CCCCCC", end_color="CCCCCC", fill_type="solid")
+        try:
+            output_path = Path(output_path)
+            output_path.parent.mkdir(parents=True, exist_ok=True)
 
-        # Write data
-        for row_idx, row in enumerate(df.itertuples(index=False), start=2):
-            for col_idx, value in enumerate(row, start=1):
-                ws.cell(row_idx, col_idx, value)
+            # Create or open workbook
+            wb, file_existed = create_or_open_workbook(output_path)
 
-        # Adjust column widths
-        for col_idx in range(1, len(df.columns) + 1):
-            ws.column_dimensions[get_column_letter(col_idx)].width = 15
+            # Generate worksheet name
+            ws_name = generate_unique_worksheet_name(wb, "Database Info")
+            ws = wb.create_sheet(ws_name)
 
-    def _export_ber_statistics(self, wb: Workbook, stats: BERStatistics) -> None:
-        """Export BER statistics to workbook.
+            # Prepare data
+            data = {
+                "Property": [
+                    "Database Path",
+                    "Total Tests",
+                    "Unique Systems",
+                    "Train Speeds",
+                    "Date Range",
+                    "",  # Blank row
+                    "Status Breakdown:",
+                ],
+                "Value": [
+                    str(self.db.db_path),
+                    f"{info.total_tests:,}",
+                    str(info.unique_hosts),
+                    ", ".join(str(s) for s in info.unique_speeds),
+                    f"{info.date_range[0]} to {info.date_range[1]}" if info.date_range else "N/A",
+                    "",
+                    "",
+                ],
+            }
+
+            # Add status breakdown
+            for status, count in info.status_breakdown.items():
+                percentage = (count / info.total_tests * 100) if info.total_tests > 0 else 0
+                data["Property"].append(f"  {status}")
+                data["Value"].append(f"{count:,} ({percentage:.1f}%)")
+
+            # Add blank row and ingestion count
+            data["Property"].extend(["", "Total Ingestions"])
+            data["Value"].extend(["", str(info.total_ingestions)])
+
+            headers = ["Property", "Value"]
+            write_table_to_worksheet(ws, data, headers, title="Database Information")
+
+            rows_written = len(data["Property"])
+
+            # Save workbook
+            wb.save(output_path)
+
+            return ExcelExportResult(
+                output_path=output_path,
+                worksheet_name=ws_name,
+                rows_written=rows_written,
+                file_existed=file_existed,
+            )
+
+        except Exception as e:
+            raise ExcelGenerationError(
+                f"Failed to export database info: {e}", output_path=str(output_path)
+            ) from e
+
+    def _prepare_ber_statistics_table_data(self, stats: BERStatistics) -> Dict[str, List]:
+        """Prepare BER statistics data for table format.
 
         Args:
-            wb: Workbook to add sheet to
             stats: BER statistics
+
+        Returns:
+            Dictionary mapping column names to data lists
         """
-        ws = wb.create_sheet("BER Statistics")
+        data = {
+            "Lane": [],
+            "Min BER": [],
+            "Avg BER": [],
+            "Max BER": [],
+            "High BER Count": [],
+            "Samples": [],
+        }
 
-        # Write headers
-        ws.cell(1, 1, "Lane")
-        ws.cell(1, 2, "Min BER")
-        ws.cell(1, 3, "Max BER")
-        ws.cell(1, 4, "Avg BER")
-        ws.cell(1, 5, "Samples")
-
-        # Format headers
-        for col in range(1, 6):
-            ws.cell(1, col).font = Font(bold=True)
-            ws.cell(1, col).fill = PatternFill(start_color="CCCCCC", end_color="CCCCCC", fill_type="solid")
-
-        # Write data
-        row = 2
         for lane_id in sorted(stats.lane_stats.keys()):
             lane_stat = stats.lane_stats[lane_id]
+            data["Lane"].append(lane_id)
+            # Store numeric values (or "-" for None) - formatting will be applied by write_table_to_worksheet
+            data["Min BER"].append(lane_stat.min_ber if lane_stat.min_ber is not None else "-")
+            data["Avg BER"].append(lane_stat.avg_ber if lane_stat.avg_ber is not None else "-")
+            data["Max BER"].append(lane_stat.max_ber if lane_stat.max_ber is not None else "-")
+            data["High BER Count"].append(lane_stat.high_ber_count)
+            data["Samples"].append(lane_stat.sample_count)
 
-            ws.cell(row, 1, lane_id)
-            ws.cell(row, 2, lane_stat.min_ber)
-            ws.cell(row, 3, lane_stat.max_ber)
-            ws.cell(row, 4, lane_stat.avg_ber)
-            ws.cell(row, 5, lane_stat.sample_count)
-
-            row += 1
-
-        # Adjust column widths
-        ws.column_dimensions["A"].width = 25
-        for col in ["B", "C", "D"]:
-            ws.column_dimensions[col].width = 15
-        ws.column_dimensions["E"].width = 10
-
-    def _export_counts(
-        self,
-        wb: Workbook,
-        counts: Union[ThresholdExceededCounts, CustomThresholdCounts, TrainingFailureCounts],
-    ) -> None:
-        """Export count data to workbook.
-
-        Args:
-            wb: Workbook to add sheet to
-            counts: Count data
-        """
-        # Determine sheet name
-        if isinstance(counts, ThresholdExceededCounts):
-            sheet_name = "BER Threshold Exceeded"
-        elif isinstance(counts, CustomThresholdCounts):
-            sheet_name = "Custom Threshold Counts"
-        elif isinstance(counts, TrainingFailureCounts):
-            sheet_name = "Training Failures"
-        else:
-            sheet_name = "Lane Counts"
-
-        ws = wb.create_sheet(sheet_name)
-
-        # Write headers
-        ws.cell(1, 1, "Lane")
-        ws.cell(1, 2, "Count")
-
-        # Format headers
-        for col in range(1, 3):
-            ws.cell(1, col).font = Font(bold=True)
-            ws.cell(1, col).fill = PatternFill(start_color="CCCCCC", end_color="CCCCCC", fill_type="solid")
-
-        # Write data
-        row = 2
-        for lane_id in sorted(counts.lane_counts.keys()):
-            count = counts.lane_counts[lane_id]
-
-            ws.cell(row, 1, lane_id)
-            ws.cell(row, 2, count)
-
-            row += 1
-
-        # Adjust column widths
-        ws.column_dimensions["A"].width = 25
-        ws.column_dimensions["B"].width = 10
-
-    def _apply_ber_heatmap_formatting(
-        self,
-        wb: Workbook,
-        stats: BERStatistics,
-        color_scheme: Optional[ColorScheme],
-    ) -> None:
-        """Apply conditional formatting for BER heatmap.
-
-        Args:
-            wb: Workbook with BER statistics
-            stats: BER statistics
-            color_scheme: Color scheme (not used in MVP - placeholder)
-        """
-        # Placeholder for conditional formatting
-        # In MVP, we just apply basic formatting
-        # Full implementation would use openpyxl conditional formatting
-        logger.debug("BER heatmap formatting applied (basic)")
-
-    def _apply_count_heatmap_formatting(
-        self,
-        wb: Workbook,
-        counts: Union[ThresholdExceededCounts, CustomThresholdCounts, TrainingFailureCounts],
-        color_scheme: Optional[ColorScheme],
-    ) -> None:
-        """Apply conditional formatting for count heatmap.
-
-        Args:
-            wb: Workbook with count data
-            counts: Count data
-            color_scheme: Color scheme (not used in MVP - placeholder)
-        """
-        # Placeholder for conditional formatting
-        logger.debug("Count heatmap formatting applied (basic)")
+        return data

@@ -18,7 +18,7 @@ from bh_glx_data.core.exceptions import (
     QueryError,
 )
 from bh_glx_data.system_analysis.database import DatabaseManager, get_default_db_path
-from bh_glx_data.system_analysis.export import ExcelExporter, ExportFilters
+from bh_glx_data.system_analysis.export import ExcelExporter
 from bh_glx_data.system_analysis.ingestion import CSVIngester
 from bh_glx_data.system_analysis.interactive import AnalysisShell
 from bh_glx_data.system_analysis.query_engine import LaneSelector, QueryEngine
@@ -58,9 +58,6 @@ Examples:
 
   # Query with heatmap visualization
   %(prog)s threshold all --speed 200 --format heatmap
-
-  # Export database to Excel
-  %(prog)s export-excel --output full_db.xlsx
 
   # Interactive shell
   %(prog)s shell
@@ -130,7 +127,13 @@ Lane Specifications:
         "--statistic",
         choices=["avg", "min", "max", "high_ber"],
         default="max",
-        help="Statistic to display in heatmap (avg shows average with variance indicators)",
+        help="Statistic to display in heatmap (avg includes variance indicators)",
+    )
+    stats_parser.add_argument(
+        "--excel-output",
+        type=Path,
+        metavar="FILE",
+        help="Export results to Excel file (creates new file or adds worksheet to existing)",
     )
 
     # Threshold command
@@ -156,6 +159,12 @@ Lane Specifications:
         type=str,
         help="Color scheme name for heatmap",
     )
+    threshold_parser.add_argument(
+        "--excel-output",
+        type=Path,
+        metavar="FILE",
+        help="Export results to Excel file (creates new file or adds worksheet to existing)",
+    )
 
     # Custom threshold command
     custom_parser = subparsers.add_parser("custom", help="Show custom BER threshold counts")
@@ -179,6 +188,12 @@ Lane Specifications:
         type=str,
         help="Color scheme name for heatmap",
     )
+    custom_parser.add_argument(
+        "--excel-output",
+        type=Path,
+        metavar="FILE",
+        help="Export results to Excel file (creates new file or adds worksheet to existing)",
+    )
 
     # Training failures command
     training_parser = subparsers.add_parser("training", help="Show training failure counts")
@@ -201,6 +216,12 @@ Lane Specifications:
         type=str,
         help="Color scheme name for heatmap",
     )
+    training_parser.add_argument(
+        "--excel-output",
+        type=Path,
+        metavar="FILE",
+        help="Export results to Excel file (creates new file or adds worksheet to existing)",
+    )
 
     # Histogram command
     histogram_parser = subparsers.add_parser("histogram", help="Show BER histogram for lane(s)")
@@ -222,6 +243,12 @@ Lane Specifications:
         default=50,
         help="Maximum width of histogram bars in characters (default: 50)",
     )
+    histogram_parser.add_argument(
+        "--excel-output",
+        type=Path,
+        metavar="FILE",
+        help="Export results to Excel file (creates new file or adds worksheet to existing)",
+    )
 
     # Advanced stats command
     advanced_stats_parser = subparsers.add_parser(
@@ -240,38 +267,20 @@ Lane Specifications:
         dest="speeds",
         help="Filter by train speed",
     )
+    advanced_stats_parser.add_argument(
+        "--excel-output",
+        type=Path,
+        metavar="FILE",
+        help="Export results to Excel file (creates new file or adds worksheet to existing)",
+    )
 
     # Info command
     info_parser = subparsers.add_parser("info", help="Show database information")
-
-    # Export command
-    export_parser = subparsers.add_parser("export-excel", help="Export database to Excel")
-    export_parser.add_argument(
-        "--output",
+    info_parser.add_argument(
+        "--excel-output",
         type=Path,
-        help="Output Excel file path (default: database_export.xlsx)",
-    )
-    export_parser.add_argument(
-        "--hosts",
-        nargs="+",
-        help="Filter by hostnames",
-    )
-    export_parser.add_argument(
-        "--speeds",
-        type=int,
-        nargs="+",
-        help="Filter by train speeds",
-    )
-    export_parser.add_argument(
-        "--status",
-        nargs="+",
-        help="Filter by test status",
-    )
-    export_parser.add_argument(
-        "--date-range",
-        nargs=2,
-        metavar=("START", "END"),
-        help="Filter by date range (YYYY-MM-DD YYYY-MM-DD)",
+        metavar="FILE",
+        help="Export results to Excel file (creates new file or adds worksheet to existing)",
     )
 
     # Shell command
@@ -349,15 +358,32 @@ def handle_stats(db: DatabaseManager, args: argparse.Namespace) -> int:
             train_speeds=args.speeds,
         )
 
-        if args.format == "table":
-            renderer = TableRenderer()
-            output = renderer.render_ber_statistics(result)
-            print(output)
-        else:  # heatmap
+        # Terminal output (if no Excel export or if verbose)
+        if not args.excel_output or args.verbose:
+            if args.format == "table":
+                renderer = TableRenderer()
+                output = renderer.render_ber_statistics(result)
+                print(output)
+            else:  # heatmap
+                color_scheme = _get_color_scheme(args.color_scheme, BER_COLOR_SCHEMES)
+                renderer = HeatMapRenderer(ber_color_scheme=color_scheme)
+                output = renderer.render_ber_heatmap(result, metric=args.statistic)
+                print(output)
+
+        # Excel export (if requested)
+        if args.excel_output:
+            exporter = ExcelExporter(db)
             color_scheme = _get_color_scheme(args.color_scheme, BER_COLOR_SCHEMES)
-            renderer = HeatMapRenderer(ber_color_scheme=color_scheme)
-            output = renderer.render_ber_heatmap(result, metric=args.statistic)
-            print(output)
+            export_result = exporter.export_ber_statistics(
+                result,
+                args.excel_output,
+                lane_spec=args.lane_spec,
+                format=args.format,
+                color_scheme=color_scheme,
+            )
+            logger.info(f"\nExported to: {export_result.output_path}")
+            logger.info(f"Worksheet: {export_result.worksheet_name}")
+            logger.info(f"Rows written: {export_result.rows_written}")
 
         return 0
 
@@ -389,15 +415,32 @@ def handle_threshold(db: DatabaseManager, args: argparse.Namespace) -> int:
 
         result = engine.query_ber_threshold_exceeded(selector, train_speeds=args.speeds)
 
-        if args.format == "table":
-            renderer = TableRenderer()
-            output = renderer.render_count_table(result)
-            print(output)
-        else:  # heatmap
+        # Terminal output (if no Excel export or if verbose)
+        if not args.excel_output or args.verbose:
+            if args.format == "table":
+                renderer = TableRenderer()
+                output = renderer.render_count_table(result)
+                print(output)
+            else:  # heatmap
+                color_scheme = _get_color_scheme(args.color_scheme, COUNT_COLOR_SCHEMES)
+                renderer = HeatMapRenderer(count_color_scheme=color_scheme)
+                output = renderer.render_count_heatmap(result)
+                print(output)
+
+        # Excel export (if requested)
+        if args.excel_output:
+            exporter = ExcelExporter(db)
             color_scheme = _get_color_scheme(args.color_scheme, COUNT_COLOR_SCHEMES)
-            renderer = HeatMapRenderer(count_color_scheme=color_scheme)
-            output = renderer.render_count_heatmap(result)
-            print(output)
+            export_result = exporter.export_count_data(
+                result,
+                args.excel_output,
+                lane_spec=args.lane_spec,
+                format=args.format,
+                color_scheme=color_scheme,
+            )
+            logger.info(f"\nExported to: {export_result.output_path}")
+            logger.info(f"Worksheet: {export_result.worksheet_name}")
+            logger.info(f"Rows written: {export_result.rows_written}")
 
         return 0
 
@@ -433,15 +476,32 @@ def handle_custom(db: DatabaseManager, args: argparse.Namespace) -> int:
             train_speeds=args.speeds,
         )
 
-        if args.format == "table":
-            renderer = TableRenderer()
-            output = renderer.render_count_table(result)
-            print(output)
-        else:  # heatmap
+        # Terminal output (if no Excel export or if verbose)
+        if not args.excel_output or args.verbose:
+            if args.format == "table":
+                renderer = TableRenderer()
+                output = renderer.render_count_table(result)
+                print(output)
+            else:  # heatmap
+                color_scheme = _get_color_scheme(args.color_scheme, COUNT_COLOR_SCHEMES)
+                renderer = HeatMapRenderer(count_color_scheme=color_scheme)
+                output = renderer.render_count_heatmap(result)
+                print(output)
+
+        # Excel export (if requested)
+        if args.excel_output:
+            exporter = ExcelExporter(db)
             color_scheme = _get_color_scheme(args.color_scheme, COUNT_COLOR_SCHEMES)
-            renderer = HeatMapRenderer(count_color_scheme=color_scheme)
-            output = renderer.render_count_heatmap(result)
-            print(output)
+            export_result = exporter.export_count_data(
+                result,
+                args.excel_output,
+                lane_spec=args.lane_spec,
+                format=args.format,
+                color_scheme=color_scheme,
+            )
+            logger.info(f"\nExported to: {export_result.output_path}")
+            logger.info(f"Worksheet: {export_result.worksheet_name}")
+            logger.info(f"Rows written: {export_result.rows_written}")
 
         return 0
 
@@ -473,15 +533,32 @@ def handle_training(db: DatabaseManager, args: argparse.Namespace) -> int:
 
         result = engine.query_training_failures(selector, train_speeds=args.speeds)
 
-        if args.format == "table":
-            renderer = TableRenderer()
-            output = renderer.render_count_table(result)
-            print(output)
-        else:  # heatmap
+        # Terminal output (if no Excel export or if verbose)
+        if not args.excel_output or args.verbose:
+            if args.format == "table":
+                renderer = TableRenderer()
+                output = renderer.render_count_table(result)
+                print(output)
+            else:  # heatmap
+                color_scheme = _get_color_scheme(args.color_scheme, COUNT_COLOR_SCHEMES)
+                renderer = HeatMapRenderer(count_color_scheme=color_scheme)
+                output = renderer.render_count_heatmap(result)
+                print(output)
+
+        # Excel export (if requested)
+        if args.excel_output:
+            exporter = ExcelExporter(db)
             color_scheme = _get_color_scheme(args.color_scheme, COUNT_COLOR_SCHEMES)
-            renderer = HeatMapRenderer(count_color_scheme=color_scheme)
-            output = renderer.render_count_heatmap(result)
-            print(output)
+            export_result = exporter.export_count_data(
+                result,
+                args.excel_output,
+                lane_spec=args.lane_spec,
+                format=args.format,
+                color_scheme=color_scheme,
+            )
+            logger.info(f"\nExported to: {export_result.output_path}")
+            logger.info(f"Worksheet: {export_result.worksheet_name}")
+            logger.info(f"Rows written: {export_result.rows_written}")
 
         return 0
 
@@ -513,9 +590,23 @@ def handle_histogram(db: DatabaseManager, args: argparse.Namespace) -> int:
 
         result = engine.query_ber_histogram(selector, train_speeds=args.speeds)
 
-        renderer = HeatMapRenderer()
-        output = renderer.render_ber_histogram(result, max_bar_width=args.max_bar_width)
-        print(output)
+        # Terminal output (if no Excel export or if verbose)
+        if not args.excel_output or args.verbose:
+            renderer = HeatMapRenderer()
+            output = renderer.render_ber_histogram(result, max_bar_width=args.max_bar_width)
+            print(output)
+
+        # Excel export (if requested)
+        if args.excel_output:
+            exporter = ExcelExporter(db)
+            export_result = exporter.export_histogram(
+                result,
+                args.excel_output,
+                lane_spec=args.lane_spec,
+            )
+            logger.info(f"\nExported to: {export_result.output_path}")
+            logger.info(f"Worksheet: {export_result.worksheet_name}")
+            logger.info(f"Rows written: {export_result.rows_written}")
 
         return 0
 
@@ -547,9 +638,23 @@ def handle_advanced_stats(db: DatabaseManager, args: argparse.Namespace) -> int:
 
         result = engine.query_aggregated_host_stats(selector, train_speeds=args.speeds)
 
-        renderer = TableRenderer()
-        output = renderer.render_aggregated_host_stats(result)
-        print(output)
+        # Terminal output (if no Excel export or if verbose)
+        if not args.excel_output or args.verbose:
+            renderer = TableRenderer()
+            output = renderer.render_aggregated_host_stats(result)
+            print(output)
+
+        # Excel export (if requested)
+        if args.excel_output:
+            exporter = ExcelExporter(db)
+            export_result = exporter.export_advanced_stats(
+                result,
+                args.excel_output,
+                lane_spec=args.lane_spec,
+            )
+            logger.info(f"\nExported to: {export_result.output_path}")
+            logger.info(f"Worksheet: {export_result.worksheet_name}")
+            logger.info(f"Rows written: {export_result.rows_written}")
 
         return 0
 
@@ -578,17 +683,30 @@ def handle_info(db: DatabaseManager, args: argparse.Namespace) -> int:
     try:
         stats = db.get_database_stats()
 
-        print("\nDatabase Information:")
-        print(f"  Database: {db.db_path}")
-        print(f"  Total tests: {stats.total_tests:,}")
-        print(f"  Unique systems: {stats.unique_hosts}")
-        print(f"  Train speeds: {', '.join(str(s) for s in stats.unique_speeds)}")
-        print(f"  Date range: {stats.date_range[0]} to {stats.date_range[1]}")
-        print(f"\n  Status breakdown:")
-        for status, count in stats.status_breakdown.items():
-            percentage = (count / stats.total_tests * 100) if stats.total_tests > 0 else 0
-            print(f"    {status}: {count:,} ({percentage:.1f}%)")
-        print(f"\n  Total ingestions: {stats.total_ingestions}\n")
+        # Terminal output (if no Excel export or if verbose)
+        if not args.excel_output or args.verbose:
+            print("\nDatabase Information:")
+            print(f"  Database: {db.db_path}")
+            print(f"  Total tests: {stats.total_tests:,}")
+            print(f"  Unique systems: {stats.unique_hosts}")
+            print(f"  Train speeds: {', '.join(str(s) for s in stats.unique_speeds)}")
+            print(f"  Date range: {stats.date_range[0]} to {stats.date_range[1]}")
+            print(f"\n  Status breakdown:")
+            for status, count in stats.status_breakdown.items():
+                percentage = (count / stats.total_tests * 100) if stats.total_tests > 0 else 0
+                print(f"    {status}: {count:,} ({percentage:.1f}%)")
+            print(f"\n  Total ingestions: {stats.total_ingestions}\n")
+
+        # Excel export (if requested)
+        if args.excel_output:
+            exporter = ExcelExporter(db)
+            export_result = exporter.export_database_info(
+                stats,
+                args.excel_output,
+            )
+            logger.info(f"\nExported to: {export_result.output_path}")
+            logger.info(f"Worksheet: {export_result.worksheet_name}")
+            logger.info(f"Rows written: {export_result.rows_written}")
 
         return 0
 
@@ -601,57 +719,6 @@ def handle_info(db: DatabaseManager, args: argparse.Namespace) -> int:
         return 1
 
 
-def handle_export_excel(db: DatabaseManager, args: argparse.Namespace) -> int:
-    """Handle export-excel command.
-
-    Args:
-        db: DatabaseManager instance
-        args: Parsed arguments
-
-    Returns:
-        Exit code (0 for success, 1 for error)
-    """
-    try:
-        output_path = args.output or Path("database_export.xlsx")
-
-        # Build filters
-        filters = None
-        if any([args.hosts, args.speeds, args.status, args.date_range]):
-            filters = ExportFilters(
-                hosts=args.hosts,
-                train_speeds=args.speeds,
-                test_status=args.status,
-                date_range=tuple(args.date_range) if args.date_range else None,
-            )
-
-        logger.info("Exporting database to Excel...")
-
-        exporter = ExcelExporter(db)
-        result = exporter.export_full_database(output_path, filters=filters)
-
-        logger.info("\nExport complete:")
-        logger.info(f"  Rows exported: {result.rows_exported:,}")
-        logger.info(f"  Sheets created: {result.sheets_created}")
-        logger.info(f"  File size: {result.file_size_bytes / (1024 * 1024):.1f} MB")
-        logger.info(f"  Output: {result.output_path}")
-
-        if filters:
-            logger.info(f"\n  Filters applied:")
-            if filters.hosts:
-                logger.info(f"    - Hosts: {', '.join(filters.hosts)}")
-            if filters.train_speeds:
-                logger.info(f"    - Speeds: {', '.join(str(s) for s in filters.train_speeds)}")
-            if filters.test_status:
-                logger.info(f"    - Status: {', '.join(filters.test_status)}")
-            if filters.date_range:
-                logger.info(f"    - Date range: {filters.date_range[0]} to {filters.date_range[1]}")
-
-        return 0
-
-    except Exception as e:
-        logger.error(f"Export failed: {e}")
-        logger.debug("", exc_info=True)
-        return 1
 
 
 def handle_shell(db: DatabaseManager, args: argparse.Namespace) -> int:
@@ -666,8 +733,7 @@ def handle_shell(db: DatabaseManager, args: argparse.Namespace) -> int:
     """
     try:
         engine = QueryEngine(db)
-        exporter = ExcelExporter(db)
-        shell = AnalysisShell(engine, exporter)
+        shell = AnalysisShell(engine)
 
         shell.run()
         return 0
@@ -719,7 +785,7 @@ def main():
         db = DatabaseManager(db_path)
 
         # Initialize schema if this is a new database or command is not info/shell
-        if args.command in ["ingest", "stats", "threshold", "custom", "training", "histogram", "advanced-stats", "export-excel"]:
+        if args.command in ["ingest", "stats", "threshold", "custom", "training", "histogram", "advanced-stats"]:
             db.initialize_schema()
         elif args.command in ["info", "shell"]:
             # For info and shell, only initialize if database doesn't exist
@@ -750,8 +816,6 @@ def main():
         return handle_advanced_stats(db, args)
     elif args.command == "info":
         return handle_info(db, args)
-    elif args.command == "export-excel":
-        return handle_export_excel(db, args)
     elif args.command == "shell":
         return handle_shell(db, args)
     else:

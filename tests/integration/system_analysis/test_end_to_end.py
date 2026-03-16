@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from bh_glx_data.system_analysis.database import DatabaseManager
-from bh_glx_data.system_analysis.export import ExcelExporter, ExportFilters
+from bh_glx_data.system_analysis.export import ExcelExporter
 from bh_glx_data.system_analysis.ingestion import CSVIngester
 from bh_glx_data.system_analysis.interactive import AnalysisShell
 from bh_glx_data.system_analysis.query_engine import LaneSelector, QueryEngine
@@ -286,34 +286,39 @@ class TestEndToEndWorkflow:
         assert len(output) > 0
 
     def test_excel_export(self, test_db, sample_csv_dir, tmp_path):
-        """Test exporting database to Excel."""
+        """Test exporting database info to Excel."""
         # Ingest data
         ingester = CSVIngester(test_db)
         ingester.ingest_directory(sample_csv_dir)
 
-        # Export to Excel
+        # Export database info to Excel
         exporter = ExcelExporter(test_db)
         output_path = tmp_path / "export.xlsx"
-        result = exporter.export_full_database(output_path)
+        stats = test_db.get_database_stats()
+        result = exporter.export_database_info(stats, output_path)
 
         assert result.output_path.exists()
-        assert result.rows_exported > 0
-        assert result.sheets_created > 0
+        assert result.rows_written > 0
+        assert result.worksheet_name == "Database Info"
 
-    def test_excel_export_with_filters(self, test_db, sample_csv_dir, tmp_path):
-        """Test exporting database with filters."""
+    def test_excel_export_with_query(self, test_db, sample_csv_dir, tmp_path):
+        """Test querying data and exporting to Excel."""
         # Ingest data
         ingester = CSVIngester(test_db)
         ingester.ingest_directory(sample_csv_dir)
 
-        # Export with filters
+        # Query BER statistics and export to Excel
+        engine = QueryEngine(test_db)
+        selector = LaneSelector.from_spec("all")
+        stats = engine.query_ber_statistics(selector, train_speeds=[100])
+
         exporter = ExcelExporter(test_db)
         output_path = tmp_path / "filtered_export.xlsx"
-        filters = ExportFilters(hosts=["bh-glx-c02u02"], train_speeds=[100])
-        result = exporter.export_full_database(output_path, filters=filters)
+        result = exporter.export_ber_statistics(stats, output_path, lane_spec="all", format="table")
 
         assert result.output_path.exists()
-        assert result.rows_exported > 0
+        assert result.rows_written > 0
+        assert result.worksheet_name == "Stats - all"
 
     def test_database_stats(self, test_db, sample_csv_dir):
         """Test getting database statistics."""
@@ -358,8 +363,7 @@ class TestInteractiveShell:
         ingester.ingest_directory(sample_csv_dir)
 
         engine = QueryEngine(test_db)
-        exporter = ExcelExporter(test_db)
-        shell = AnalysisShell(engine, exporter)
+        shell = AnalysisShell(engine)
 
         assert shell.query_engine is not None
         assert shell.exporter is not None
@@ -392,10 +396,12 @@ class TestErrorHandling:
         assert len(stats.lane_stats) == 0
 
     def test_export_empty_database(self, test_db, tmp_path):
-        """Test exporting empty database."""
+        """Test exporting empty database info."""
         exporter = ExcelExporter(test_db)
         output_path = tmp_path / "empty_export.xlsx"
 
-        # Should create file with empty data
-        result = exporter.export_full_database(output_path)
+        # Export database info even when empty
+        stats = test_db.get_database_stats()
+        result = exporter.export_database_info(stats, output_path)
         assert result.output_path.exists()
+        assert result.rows_written > 0  # Still has headers and structure

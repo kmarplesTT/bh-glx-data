@@ -351,10 +351,20 @@ Database utility for aggregating and querying PRBS test data across multiple sys
   - Built-in presets: default, strict, sensitive, tolerant
 
 - **`export.py`**: Excel export functionality
-  - `ExcelExporter`: Export database to Excel with filtering
-  - Multi-sheet workbooks (Summary, PRBS Tests, Training Failures, BER Exceeded, Metadata)
-  - Filtered exports by hosts, speeds, status, date ranges
-  - Conditional formatting for heatmap visualization
+  - `ExcelExporter`: Export query results to Excel with formatting
+  - Methods for exporting stats, counts, histograms, and advanced stats
+  - Support for table and heatmap formats with color coding
+  - Creates or appends to existing Excel files
+  - Worksheet naming based on command and lane specification
+
+- **`excel_formatters.py`**: Excel formatting utilities
+  - `create_or_open_workbook()`: Create new or open existing Excel file
+  - `generate_unique_worksheet_name()`: Generate unique worksheet names with lane_spec
+  - `write_table_to_worksheet()`: Write tabular data with headers and metadata
+  - `write_heatmap_to_worksheet()`: Write heatmap with cell background colors
+  - `write_histogram_to_worksheet()`: Write histogram with Excel column chart
+  - `write_metadata_section()`: Add summary metadata to worksheets
+  - Terminal color to Excel hex color mapping
 
 - **`interactive.py`**: Interactive REPL shell
   - `AnalysisShell`: Interactive command-line interface
@@ -376,8 +386,9 @@ bh-analyze-systems stats 01:00.0/ETH07 --format heatmap --color-scheme strict
 # Custom threshold analysis
 bh-analyze-systems custom 01:00.0/* 1e-10
 
-# Export to Excel
-bh-analyze-systems export-excel --output analysis.xlsx --hosts bh-glx-c02u02 --speeds 200
+# Export query results to Excel
+bh-analyze-systems stats all --speed 200 --format heatmap --excel-output analysis.xlsx
+bh-analyze-systems histogram 01:00.0/ETH07/4 --speed 200 --excel-output analysis.xlsx
 
 # Interactive shell
 bh-analyze-systems shell
@@ -386,9 +397,21 @@ bh-analyze-systems shell
 **Lane Selection Syntax:**
 - `all` - All lanes on all systems
 - `01:00.0/ETH07` - Specific port (all lanes)
+- `01:00.0/ETH07/4` - Specific lane (lane 4)
 - `01:00.0/*` - All ports on bus_id
 - `bh-glx-c02u02/01:00.0/ETH07` - Specific system and port
 - `*/ETH07` - ETH07 on all systems
+- `*/ETH07/4` - Lane 4 on ETH07 across all systems
+
+**Excel Export:**
+All analysis commands support `--excel-output FILE` option:
+- `stats`, `threshold`, `custom`, `training` - Export tables or heatmaps
+- `histogram` - Export with Excel column chart
+- `advanced-stats` - Export two tables (per-host stats + fleet aggregation)
+- `info` - Export database information
+- Worksheet names include lane specification (e.g., "Stats - all", "Histogram - 01:00.0/ETH07/4")
+- Heatmaps use cell background colors
+- Appends to existing files or creates new ones
 
 **Documentation:**
 - Architecture: `docs/system_analysis_architecture.md`
@@ -404,7 +427,7 @@ bh-analyze-systems shell
 4. **Analysis Path B (Multi-System Analysis):**
    - **Database Ingestion** → System Analysis (bh-analyze-systems ingest)
    - **Query & Visualization** → System Analysis (stats, threshold, training, etc.)
-   - **Export** → System Analysis (export-excel)
+   - **Export** → Add --excel-output option to any analysis command
 
 ### Test Type Identification
 

@@ -464,5 +464,42 @@ bh-glx-data --log-level DEBUG <command> [options]
 
 ---
 
+## System Analysis Tool
+
+The `bh-analyze-systems` tool aggregates PRBS test data across multiple systems with database storage, querying, and visualization.
+
+**Key Features:**
+
+- SQLite database with efficient indexing
+- Flexible lane selection (wildcards, specific ports, individual lanes)
+- BER statistics, threshold analysis, training failure tracking
+- Histogram and advanced statistics analysis
+- Terminal heatmaps with color coding
+- Excel export with formatted tables, colored heatmaps, and charts
+- Interactive REPL shell
+
+**Quick Example:**
+
+```bash
+# Ingest CSV data
+bh-analyze-systems ingest ./data/
+
+# Query with heatmap visualization
+bh-analyze-systems stats all --speed 200 --format heatmap
+
+# Export to Excel with cell colors
+bh-analyze-systems stats all --speed 200 --format heatmap --excel-output analysis.xlsx
+
+# Histogram analysis with Excel chart
+bh-analyze-systems histogram 01:00.0/ETH07/4 --speed 200 --excel-output histogram.xlsx
+
+# Interactive shell
+bh-analyze-systems shell
+```
+
+**See [User Guide](docs/user_guides/bh-analyze-systems.md) for detailed documentation.**
+
+---
+
 **Last Updated:** 2026-03-13
 **Package Version:** 0.5.0

@@ -32,7 +32,7 @@ class AnalysisShell:
     """Interactive shell for system analysis.
 
     This class provides a REPL interface for querying and analyzing
-    PRBS test data with command history and export capabilities.
+    PRBS test data with command history and Excel export.
 
     Attributes:
         query_engine: QueryEngine instance
@@ -42,15 +42,14 @@ class AnalysisShell:
         last_result: Most recent query result
     """
 
-    def __init__(self, query_engine: QueryEngine, exporter: ExcelExporter):
+    def __init__(self, query_engine: QueryEngine):
         """Initialize analysis shell.
 
         Args:
             query_engine: QueryEngine instance
-            exporter: ExcelExporter instance
         """
         self.query_engine = query_engine
-        self.exporter = exporter
+        self.exporter = ExcelExporter(query_engine.db)
         self.renderer = TableRenderer()
         self.history = []
         self.last_result: Optional[
@@ -119,14 +118,16 @@ class AnalysisShell:
             self._handle_custom(parts[1:])
         elif cmd == "training":
             self._handle_training(parts[1:])
+        elif cmd == "histogram":
+            self._handle_histogram(parts[1:])
+        elif cmd == "advanced-stats":
+            self._handle_advanced_stats(parts[1:])
         elif cmd == "systems":
             self._handle_systems()
         elif cmd == "speeds":
             self._handle_speeds()
         elif cmd == "info":
-            self._handle_info()
-        elif cmd == "export":
-            self._handle_export(parts[1:])
+            self._handle_info(parts[1:])
         elif cmd == "history":
             self._handle_history()
         else:
@@ -138,15 +139,21 @@ class AnalysisShell:
         help_text = """
 Available commands:
 
-  stats <lane-spec> [--speed SPEED] [--format FORMAT] [--statistic STAT]
+  stats <lane-spec> [--speed SPEED] [--format FORMAT] [--statistic STAT] [--excel-output FILE]
                                                - Show BER statistics
-  threshold <lane-spec> [--speed SPEED]       - Show BER threshold exceeded
-  custom <lane-spec> <threshold> [--speed]    - Show custom threshold counts
-  training <lane-spec> [--speed SPEED]        - Show training failures
+  threshold <lane-spec> [--speed SPEED] [--format FORMAT] [--excel-output FILE]
+                                               - Show BER threshold exceeded
+  custom <lane-spec> <threshold> [--speed SPEED] [--format FORMAT] [--excel-output FILE]
+                                               - Show custom threshold counts
+  training <lane-spec> [--speed SPEED] [--format FORMAT] [--excel-output FILE]
+                                               - Show training failures
+  histogram <lane-spec> [--speed SPEED] [--excel-output FILE]
+                                               - Show BER histogram
+  advanced-stats <lane-spec> [--speed SPEED] [--excel-output FILE]
+                                               - Show aggregated host statistics
   systems                                      - List all systems
   speeds                                       - List all train speeds
-  info                                         - Show database info
-  export <format> [--output FILE]              - Export last result or database
+  info [--excel-output FILE]                  - Show database info
   history                                      - Show command history
   help                                         - Show this help
   exit                                         - Exit shell
@@ -160,10 +167,10 @@ Statistic options (for heatmap):
   avg           - Average BER
   min           - Minimum BER
   high_ber      - High BER count (BER >= 0.1)
+  variance      - Average BER with variance indicators
 
-Export formats:
-  excel         - Export last result to Excel
-  excel-db      - Export entire database to Excel
+Excel export:
+  --excel-output FILE    - Export results to Excel file
 
 Lane specifications:
   all                      - All lanes on all systems
@@ -174,10 +181,13 @@ Lane specifications:
 Examples:
   stats all --speed 200
   stats all --speed 200 --format heatmap --statistic avg
-  threshold 01:00.0/ETH07
+  stats all --excel-output analysis.xlsx
+  threshold 01:00.0/ETH07 --format heatmap --excel-output results.xlsx
   custom 01:00.0/* 1e-10 --speed 200
-  training all
-  export excel --output results.xlsx
+  training all --excel-output failures.xlsx
+  histogram 01:00.0/ETH07 --excel-output hist.xlsx
+  advanced-stats all --excel-output stats.xlsx
+  info --excel-output db_info.xlsx
 """
         print(help_text)
 
@@ -188,13 +198,14 @@ Examples:
             args: Command arguments
         """
         if not args:
-            print("Usage: stats <lane-spec> [--speed SPEED] [--format FORMAT] [--statistic STAT]")
+            print("Usage: stats <lane-spec> [--speed SPEED] [--format FORMAT] [--statistic STAT] [--excel-output FILE]")
             return
 
         lane_spec = args[0]
         speeds = self._parse_speeds(args[1:])
         output_format = self._parse_format(args[1:])
         statistic = self._parse_statistic(args[1:])
+        excel_output = self._parse_excel_output(args[1:])
 
         try:
             selector = LaneSelector.from_spec(lane_spec)
@@ -202,11 +213,26 @@ Examples:
 
             self.last_result = result
 
-            if output_format == "heatmap":
-                heatmap_renderer = HeatMapRenderer(ber_color_scheme=BER_COLOR_SCHEMES["default"])
-                print(heatmap_renderer.render_ber_heatmap(result, metric=statistic))
-            else:
-                print(self.renderer.render_ber_statistics(result))
+            # Terminal output (always show unless only exporting)
+            if not excel_output or True:  # Always show terminal output in shell
+                if output_format == "heatmap":
+                    heatmap_renderer = HeatMapRenderer(ber_color_scheme=BER_COLOR_SCHEMES["default"])
+                    print(heatmap_renderer.render_ber_heatmap(result, metric=statistic))
+                else:
+                    print(self.renderer.render_ber_statistics(result))
+
+            # Excel export (if requested)
+            if excel_output:
+                export_result = self.exporter.export_ber_statistics(
+                    result,
+                    excel_output,
+                    lane_spec=lane_spec,
+                    format=output_format,
+                    color_scheme=BER_COLOR_SCHEMES["default"],
+                )
+                print(f"\nExported to: {export_result.output_path}")
+                print(f"Worksheet: {export_result.worksheet_name}")
+                print(f"Rows written: {export_result.rows_written}")
 
         except Exception as e:
             print(f"Error: {e}")
@@ -218,18 +244,39 @@ Examples:
             args: Command arguments
         """
         if not args:
-            print("Usage: threshold <lane-spec> [--speed SPEED]")
+            print("Usage: threshold <lane-spec> [--speed SPEED] [--format FORMAT] [--excel-output FILE]")
             return
 
         lane_spec = args[0]
         speeds = self._parse_speeds(args[1:])
+        output_format = self._parse_format(args[1:])
+        excel_output = self._parse_excel_output(args[1:])
 
         try:
             selector = LaneSelector.from_spec(lane_spec)
             result = self.query_engine.query_ber_threshold_exceeded(selector, train_speeds=speeds)
 
             self.last_result = result
-            print(self.renderer.render_count_table(result))
+
+            # Terminal output
+            if output_format == "heatmap":
+                heatmap_renderer = HeatMapRenderer(count_color_scheme=COUNT_COLOR_SCHEMES["default"])
+                print(heatmap_renderer.render_count_heatmap(result))
+            else:
+                print(self.renderer.render_count_table(result))
+
+            # Excel export (if requested)
+            if excel_output:
+                export_result = self.exporter.export_count_data(
+                    result,
+                    excel_output,
+                    lane_spec=lane_spec,
+                    format=output_format,
+                    color_scheme=COUNT_COLOR_SCHEMES["default"],
+                )
+                print(f"\nExported to: {export_result.output_path}")
+                print(f"Worksheet: {export_result.worksheet_name}")
+                print(f"Rows written: {export_result.rows_written}")
 
         except Exception as e:
             print(f"Error: {e}")
@@ -241,7 +288,7 @@ Examples:
             args: Command arguments
         """
         if len(args) < 2:
-            print("Usage: custom <lane-spec> <threshold> [--speed SPEED]")
+            print("Usage: custom <lane-spec> <threshold> [--speed SPEED] [--format FORMAT] [--excel-output FILE]")
             return
 
         lane_spec = args[0]
@@ -252,6 +299,8 @@ Examples:
             return
 
         speeds = self._parse_speeds(args[2:])
+        output_format = self._parse_format(args[2:])
+        excel_output = self._parse_excel_output(args[2:])
 
         try:
             selector = LaneSelector.from_spec(lane_spec)
@@ -260,7 +309,26 @@ Examples:
             )
 
             self.last_result = result
-            print(self.renderer.render_count_table(result))
+
+            # Terminal output
+            if output_format == "heatmap":
+                heatmap_renderer = HeatMapRenderer(count_color_scheme=COUNT_COLOR_SCHEMES["default"])
+                print(heatmap_renderer.render_count_heatmap(result))
+            else:
+                print(self.renderer.render_count_table(result))
+
+            # Excel export (if requested)
+            if excel_output:
+                export_result = self.exporter.export_count_data(
+                    result,
+                    excel_output,
+                    lane_spec=lane_spec,
+                    format=output_format,
+                    color_scheme=COUNT_COLOR_SCHEMES["default"],
+                )
+                print(f"\nExported to: {export_result.output_path}")
+                print(f"Worksheet: {export_result.worksheet_name}")
+                print(f"Rows written: {export_result.rows_written}")
 
         except Exception as e:
             print(f"Error: {e}")
@@ -272,18 +340,114 @@ Examples:
             args: Command arguments
         """
         if not args:
-            print("Usage: training <lane-spec> [--speed SPEED]")
+            print("Usage: training <lane-spec> [--speed SPEED] [--format FORMAT] [--excel-output FILE]")
             return
 
         lane_spec = args[0]
         speeds = self._parse_speeds(args[1:])
+        output_format = self._parse_format(args[1:])
+        excel_output = self._parse_excel_output(args[1:])
 
         try:
             selector = LaneSelector.from_spec(lane_spec)
             result = self.query_engine.query_training_failures(selector, train_speeds=speeds)
 
             self.last_result = result
-            print(self.renderer.render_count_table(result))
+
+            # Terminal output
+            if output_format == "heatmap":
+                heatmap_renderer = HeatMapRenderer(count_color_scheme=COUNT_COLOR_SCHEMES["default"])
+                print(heatmap_renderer.render_count_heatmap(result))
+            else:
+                print(self.renderer.render_count_table(result))
+
+            # Excel export (if requested)
+            if excel_output:
+                export_result = self.exporter.export_count_data(
+                    result,
+                    excel_output,
+                    lane_spec=lane_spec,
+                    format=output_format,
+                    color_scheme=COUNT_COLOR_SCHEMES["default"],
+                )
+                print(f"\nExported to: {export_result.output_path}")
+                print(f"Worksheet: {export_result.worksheet_name}")
+                print(f"Rows written: {export_result.rows_written}")
+
+        except Exception as e:
+            print(f"Error: {e}")
+
+    def _handle_histogram(self, args: list) -> None:
+        """Handle histogram command.
+
+        Args:
+            args: Command arguments
+        """
+        if not args:
+            print("Usage: histogram <lane-spec> [--speed SPEED] [--excel-output FILE]")
+            return
+
+        lane_spec = args[0]
+        speeds = self._parse_speeds(args[1:])
+        excel_output = self._parse_excel_output(args[1:])
+
+        try:
+            selector = LaneSelector.from_spec(lane_spec)
+            result = self.query_engine.query_ber_histogram(selector, train_speeds=speeds)
+
+            self.last_result = result
+
+            # Terminal output
+            heatmap_renderer = HeatMapRenderer()
+            print(heatmap_renderer.render_ber_histogram(result, max_bar_width=50))
+
+            # Excel export (if requested)
+            if excel_output:
+                export_result = self.exporter.export_histogram(
+                    result,
+                    excel_output,
+                    lane_spec=lane_spec,
+                )
+                print(f"\nExported to: {export_result.output_path}")
+                print(f"Worksheet: {export_result.worksheet_name}")
+                print(f"Rows written: {export_result.rows_written}")
+
+        except Exception as e:
+            print(f"Error: {e}")
+
+    def _handle_advanced_stats(self, args: list) -> None:
+        """Handle advanced-stats command.
+
+        Args:
+            args: Command arguments
+        """
+        if not args:
+            print("Usage: advanced-stats <lane-spec> [--speed SPEED] [--excel-output FILE]")
+            return
+
+        lane_spec = args[0]
+        speeds = self._parse_speeds(args[1:])
+        excel_output = self._parse_excel_output(args[1:])
+
+        try:
+            selector = LaneSelector.from_spec(lane_spec)
+            result = self.query_engine.query_aggregated_host_stats(selector, train_speeds=speeds)
+
+            self.last_result = result
+
+            # Terminal output
+            print(self.renderer.render_aggregated_host_stats(result))
+
+            # Excel export (if requested)
+            if excel_output:
+                export_result = self.exporter.export_advanced_stats(
+                    result,
+                    excel_output,
+                    lane_spec=lane_spec,
+                )
+                print(f"\nExported to: {export_result.output_path}")
+                print(f"Worksheet: {export_result.worksheet_name}")
+                print(f"Rows written: {export_result.rows_written}")
 
         except Exception as e:
             print(f"Error: {e}")
@@ -309,11 +473,18 @@ Examples:
         except Exception as e:
             print(f"Error: {e}")
 
-    def _handle_info(self) -> None:
-        """Handle info command."""
+    def _handle_info(self, args: list) -> None:
+        """Handle info command.
+
+        Args:
+            args: Command arguments
+        """
+        excel_output = self._parse_excel_output(args)
+
         try:
             stats = self.query_engine.db.get_database_stats()
 
+            # Terminal output
             print("\nDatabase Information:")
             print(f"  Database: {self.query_engine.db.db_path}")
             print(f"  Total tests: {stats.total_tests:,}")
@@ -326,61 +497,19 @@ Examples:
                 print(f"    {status}: {count:,} ({percentage:.1f}%)")
             print(f"\n  Total ingestions: {stats.total_ingestions}\n")
 
+            # Excel export (if requested)
+            if excel_output:
+                export_result = self.exporter.export_database_info(
+                    stats,
+                    excel_output,
+                )
+                print(f"Exported to: {export_result.output_path}")
+                print(f"Worksheet: {export_result.worksheet_name}")
+                print(f"Rows written: {export_result.rows_written}\n")
+
         except Exception as e:
             print(f"Error: {e}")
 
-    def _handle_export(self, args: list) -> None:
-        """Handle export command.
-
-        Args:
-            args: Command arguments
-        """
-        if not args:
-            print("Usage: export <format> [--output FILE]")
-            print("Formats: excel, excel-db")
-            return
-
-        format_type = args[0].lower()
-
-        # Parse output path
-        output_path = None
-        for i, arg in enumerate(args):
-            if arg == "--output" and i + 1 < len(args):
-                output_path = Path(args[i + 1])
-                break
-
-        if format_type == "excel":
-            if self.last_result is None:
-                print("No query result to export. Run a query first.")
-                return
-
-            if output_path is None:
-                output_path = Path("query_result.xlsx")
-
-            try:
-                self.exporter.export_query_result(self.last_result, output_path)
-                print(f"Query result exported to: {output_path}")
-
-            except Exception as e:
-                print(f"Export failed: {e}")
-
-        elif format_type == "excel-db":
-            if output_path is None:
-                output_path = Path("database_export.xlsx")
-
-            try:
-                result = self.exporter.export_full_database(output_path)
-                print(
-                    f"Database exported to: {result.output_path} "
-                    f"({result.rows_exported:,} rows, {result.sheets_created} sheets)"
-                )
-
-            except Exception as e:
-                print(f"Export failed: {e}")
-
-        else:
-            print(f"Unknown export format: {format_type}")
-            print("Available formats: excel, excel-db")
 
     def _handle_history(self) -> None:
         """Handle history command."""
@@ -452,3 +581,20 @@ Examples:
             i += 1
 
         return "max"
+
+    def _parse_excel_output(self, args: list) -> Optional[Path]:
+        """Parse --excel-output argument from command args.
+
+        Args:
+            args: Command arguments
+
+        Returns:
+            Path to Excel output file, or None if not specified
+        """
+        i = 0
+        while i < len(args):
+            if args[i] == "--excel-output" and i + 1 < len(args):
+                return Path(args[i + 1])
+            i += 1
+
+        return None

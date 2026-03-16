@@ -52,8 +52,8 @@ bh-analyze-systems stats all --speed 200
 # 4. Visualize training failures as a heatmap
 bh-analyze-systems training all --speed 200 --format heatmap
 
-# 5. Export results to Excel
-bh-analyze-systems export-excel --output my_analysis.xlsx
+# 5. Export specific results to Excel
+bh-analyze-systems stats all --speed 200 --excel-output my_analysis.xlsx
 ```
 
 ---
@@ -203,6 +203,7 @@ bh-analyze-systems stats <lane_spec> [OPTIONS]
 - `--format {table|heatmap}` - Output format (default: table)
 - `--statistic {avg|min|max|high_ber}` - Statistic to display in heatmap (default: max; avg includes variance indicators)
 - `--color-scheme SCHEME` - Color scheme for heatmap (default, sensitive, tolerant)
+- `--excel-output FILE` - Export results to Excel file (creates new file or adds worksheet to existing)
 
 **Example (Table Format):**
 
@@ -246,6 +247,19 @@ bh-analyze-systems stats all --speed 200 --format heatmap --statistic min
 bh-analyze-systems stats all --speed 200 --format heatmap --statistic high_ber
 ```
 
+**Example (Excel Export):**
+
+```bash
+# Export table to Excel
+bh-analyze-systems stats "01:00.0/ETH07" --speed 200 --excel-output analysis.xlsx
+
+# Export heatmap to Excel with cell background colors
+bh-analyze-systems stats all --speed 200 --format heatmap --excel-output analysis.xlsx
+
+# Export with specific statistic
+bh-analyze-systems stats all --speed 200 --format heatmap --statistic avg --excel-output analysis.xlsx
+```
+
 Displays a color-coded heatmap with BER values across all systems and lanes.
 
 **Heatmap Statistic Options:**
@@ -282,6 +296,7 @@ bh-analyze-systems threshold <lane_spec> [OPTIONS]
 - `--speed SPEED` - Filter by train speed
 - `--format {table|heatmap}` - Output format (default: table)
 - `--color-scheme SCHEME` - Color scheme for heatmap
+- `--excel-output FILE` - Export results to Excel file
 
 **Example:**
 
@@ -299,6 +314,16 @@ bh-analyze-systems threshold "01:00.0/*" --speed 200
 └─────────────────────┴───────┘
 
 Tests: 1,200  Systems: 24  Speeds: 200
+```
+
+**Example (Excel Export):**
+
+```bash
+# Export to Excel
+bh-analyze-systems threshold "01:00.0/*" --speed 200 --excel-output failures.xlsx
+
+# Export heatmap with color-coded cells
+bh-analyze-systems threshold all --speed 200 --format heatmap --excel-output failures.xlsx
 ```
 
 **Use Cases:**
@@ -327,6 +352,7 @@ bh-analyze-systems custom <lane_spec> <threshold> [OPTIONS]
 - `--speed SPEED` - Filter by train speed
 - `--format {table|heatmap}` - Output format (default: table)
 - `--color-scheme SCHEME` - Color scheme for heatmap
+- `--excel-output FILE` - Export results to Excel file
 
 **Example:**
 
@@ -336,6 +362,9 @@ bh-analyze-systems custom "all" 1e-10 --speed 200
 
 # Count with more strict threshold
 bh-analyze-systems custom "01:00.0/*" 1e-12 --speed 200
+
+# Export to Excel
+bh-analyze-systems custom "all" 1e-10 --speed 200 --excel-output custom_threshold.xlsx
 ```
 
 **Use Cases:**
@@ -363,6 +392,7 @@ bh-analyze-systems training <lane_spec> [OPTIONS]
 - `--speed SPEED` - Filter by train speed
 - `--format {table|heatmap}` - Output format (default: table)
 - `--color-scheme SCHEME` - Color scheme for heatmap
+- `--excel-output FILE` - Export results to Excel file
 
 **Example:**
 
@@ -382,6 +412,16 @@ System: bh-glx-c02u02
 ■ = 0    ▨ = 1-10    ▦ = 11-50    ▧ = 50+
 
 Tests: 1,200  Systems: 24
+```
+
+**Example (Excel Export):**
+
+```bash
+# Export training failures to Excel
+bh-analyze-systems training all --speed 200 --excel-output training_failures.xlsx
+
+# Export heatmap with color-coded cells
+bh-analyze-systems training all --speed 200 --format heatmap --excel-output training_failures.xlsx
 ```
 
 **Use Cases:**
@@ -408,6 +448,7 @@ bh-analyze-systems histogram <lane_spec> [OPTIONS]
 
 - `--speed SPEED` - Filter by train speed
 - `--max-bar-width WIDTH` - Maximum width of histogram bars in characters (default: 50)
+- `--excel-output FILE` - Export histogram to Excel with column chart
 
 **Example (Single Lane):**
 
@@ -456,6 +497,16 @@ Lane 1:
 [... lanes 2-7 ...]
 
 Total Samples: 2408  |  Systems: 5  |  Speeds: 200
+```
+
+**Example (Excel Export):**
+
+```bash
+# Export histogram to Excel with chart
+bh-analyze-systems histogram 01:00.0/ETH07/4 --speed 200 --excel-output histogram.xlsx
+
+# Export multiple lane histograms
+bh-analyze-systems histogram 01:00.0/ETH07 --speed 200 --excel-output histogram.xlsx
 ```
 
 **Histogram Bins:**
@@ -540,6 +591,16 @@ Statistics of Host Statistics
 Systems: 2  |  Total Samples: 301  |  Speeds: 200
 ```
 
+**Example (Excel Export):**
+
+```bash
+# Export advanced statistics to Excel
+bh-analyze-systems advanced-stats 01:00.0/ETH07/4 --speed 200 --excel-output advanced.xlsx
+
+# Export fleet-wide analysis
+bh-analyze-systems advanced-stats */ETH07/4 --speed 200 --excel-output fleet_analysis.xlsx
+```
+
 **How It Works:**
 
 The command performs two-level aggregation:
@@ -622,8 +683,12 @@ Interpretation: Good consistency in typical performance (MIN and AVG), but wide 
 Show database information and statistics.
 
 ```bash
-bh-analyze-systems info
+bh-analyze-systems info [OPTIONS]
 ```
+
+**Options:**
+
+- `--excel-output FILE` - Export database information to Excel file
 
 **Example:**
 
@@ -646,81 +711,18 @@ Database Information:
   Total ingestions: 15
 ```
 
+**Example (Excel Export):**
+
+```bash
+# Export database info to Excel
+bh-analyze-systems info --excel-output db_info.xlsx
+```
+
 **Use Cases:**
 
 - Verify database contents
 - Check data coverage (systems, speeds, dates)
 - Understand test result distribution
-
----
-
-### export-excel
-
-Export database contents to Excel format.
-
-```bash
-bh-analyze-systems export-excel [OPTIONS]
-```
-
-**Options:**
-
-- `--output PATH` - Output Excel file path (default: database_export.xlsx)
-- `--hosts HOST [HOST ...]` - Filter by hostnames
-- `--speeds SPEED [SPEED ...]` - Filter by train speeds
-- `--status STATUS [STATUS ...]` - Filter by test status
-- `--date-range START END` - Filter by date range (YYYY-MM-DD YYYY-MM-DD)
-
-**Example (Full Export):**
-
-```bash
-bh-analyze-systems export-excel --output full_analysis.xlsx
-
-# Output:
-Exporting database to Excel...
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 100%
-
-Export complete:
-  Rows exported: 12,450
-  Sheets created: 5
-  File size: 2.3 MB
-  Output: full_analysis.xlsx
-```
-
-**Example (Filtered Export):**
-
-```bash
-# Export only specific systems and failures
-bh-analyze-systems export-excel \
-  --output failures.xlsx \
-  --hosts bh-glx-c02u02 bh-glx-c02u03 \
-  --speeds 200 \
-  --status TRAINING_FAIL BER_THRESHOLD_EXCEEDED
-
-# Output:
-Export complete:
-  Rows exported: 856 (filtered from 12,450)
-  Filters applied:
-    - Hosts: bh-glx-c02u02, bh-glx-c02u03
-    - Speeds: 200
-    - Status: TRAINING_FAIL, BER_THRESHOLD_EXCEEDED
-  File size: 421 KB
-  Output: failures.xlsx
-```
-
-**Excel Sheets:**
-
-1. **Summary** - Database statistics and metadata
-2. **PRBS Tests** - All test records (or filtered subset)
-3. **Training Failures** - Filtered view of training failures
-4. **BER Exceeded** - Filtered view of BER threshold exceeded
-5. **Metadata** - Ingestion history
-
-**Use Cases:**
-
-- Share analysis results with team
-- Further analysis in Excel (pivot tables, charts)
-- Archive test data snapshots
-- Offline analysis
 
 ---
 
@@ -1093,64 +1095,176 @@ bh-analyze-systems stats all --format heatmap --statistic high_ber
 
 ## Excel Export
 
-### Full Database Export
+All analysis commands support optional Excel export via the `--excel-output` option. This allows you to save query results directly to Excel files with proper formatting, colors, and charts.
 
-Export the entire database to a multi-sheet Excel workbook.
+### Key Features
 
-```bash
-bh-analyze-systems export-excel --output full_db.xlsx
-```
+1. **Worksheet Names Include Lane Spec** - Worksheets are named descriptively based on the command and lane specification (e.g., "Stats - all", "Histogram - 01:00.0/ETH07")
 
-**Sheets Created:**
+2. **Automatic File Handling** - The tool creates new Excel files or appends worksheets to existing files, allowing you to build comprehensive analysis workbooks
 
-1. **Summary** - Statistics, system count, test distribution
-2. **PRBS Tests** - All test records with full details
-3. **Training Failures** - Filtered view of training failures only
-4. **BER Exceeded** - Filtered view of BER threshold exceeded only
-5. **Ingestion Metadata** - History of data ingestion runs
+3. **Cell Background Colors for Heatmaps** - Heatmap exports use cell background colors (not font colors) to visualize data patterns
 
-### Filtered Export
+4. **Excel Charts for Histograms** - Histogram exports include native Excel column charts for easy visualization
 
-Export a subset of data based on criteria.
+5. **Summary Metadata** - Each worksheet includes a summary section with total samples, systems analyzed, and train speeds
 
-**Filter Options:**
-
-- `--hosts` - Include only specific hostnames
-- `--speeds` - Include only specific train speeds
-- `--status` - Include only specific test status values
-- `--date-range` - Include only tests within date range
-
-**Example:**
+### Usage Pattern
 
 ```bash
-# Export only failures for two systems at 200G
-bh-analyze-systems export-excel \
-  --output failures_200g.xlsx \
-  --hosts bh-glx-c02u02 bh-glx-c02u03 \
-  --speeds 200 \
-  --status TRAINING_FAIL BER_THRESHOLD_EXCEEDED
+<command> <args> --excel-output <path>
 ```
 
-### Excel Features
+### Export Examples
 
-**Formatting:**
+**Stats Command:**
 
-- Formatted headers with bold text
+```bash
+# Export table format
+bh-analyze-systems stats "01:00.0/ETH07" --speed 200 --excel-output analysis.xlsx
+
+# Export heatmap with cell colors
+bh-analyze-systems stats all --speed 200 --format heatmap --excel-output analysis.xlsx
+
+# Export average BER with variance (creates "Stats - all" worksheet)
+bh-analyze-systems stats all --speed 200 --format heatmap --statistic avg --excel-output analysis.xlsx
+```
+
+**Threshold Command:**
+
+```bash
+# Export threshold exceeded counts
+bh-analyze-systems threshold all --speed 200 --excel-output failures.xlsx
+
+# Export as colored heatmap
+bh-analyze-systems threshold all --speed 200 --format heatmap --excel-output failures.xlsx
+```
+
+**Custom Threshold Command:**
+
+```bash
+# Export custom threshold analysis
+bh-analyze-systems custom "01:00.0/*" 1e-10 --speed 200 --excel-output custom.xlsx
+```
+
+**Training Failures Command:**
+
+```bash
+# Export training failures
+bh-analyze-systems training all --speed 200 --excel-output training.xlsx
+
+# Export as heatmap with colors
+bh-analyze-systems training all --speed 200 --format heatmap --excel-output training.xlsx
+```
+
+**Histogram Command:**
+
+```bash
+# Export histogram with Excel chart (creates "Histogram - 01:00.0/ETH07/4" worksheet)
+bh-analyze-systems histogram 01:00.0/ETH07/4 --speed 200 --excel-output histogram.xlsx
+
+# Export multiple histograms (all lanes on port)
+bh-analyze-systems histogram 01:00.0/ETH07 --speed 200 --excel-output histogram.xlsx
+```
+
+**Advanced Stats Command:**
+
+```bash
+# Export two tables: per-host stats and fleet aggregation
+bh-analyze-systems advanced-stats */ETH07/4 --speed 200 --excel-output advanced.xlsx
+```
+
+**Info Command:**
+
+```bash
+# Export database information
+bh-analyze-systems info --excel-output db_info.xlsx
+```
+
+### Building Comprehensive Workbooks
+
+You can build a single Excel file with multiple worksheets by running multiple commands with the same output file:
+
+```bash
+# Create workbook with multiple analysis worksheets
+bh-analyze-systems stats all --speed 200 --format heatmap --excel-output report.xlsx
+bh-analyze-systems training all --speed 200 --format heatmap --excel-output report.xlsx
+bh-analyze-systems histogram 01:00.0/ETH07/4 --speed 200 --excel-output report.xlsx
+bh-analyze-systems advanced-stats */ETH07/4 --speed 200 --excel-output report.xlsx
+bh-analyze-systems info --excel-output report.xlsx
+
+# Result: report.xlsx with 5 worksheets:
+#   - Stats - all
+#   - Training - all
+#   - Histogram - 01:00.0/ETH07/4
+#   - Advanced Stats - */ETH07/4
+#   - Database Info
+```
+
+### Excel Formatting Details
+
+**Table Format:**
+
+- Bold headers with gray background
+- Formatted numeric values (scientific notation for BER)
 - Auto-sized columns
-- Frozen header rows
-- Number formatting for BER values
+- Summary metadata at bottom
 
-**Multiple Sheets:**
+**Heatmap Format:**
 
-- Organized data by category
-- Summary sheet with key statistics
-- Metadata for provenance
+- Row headers show port identifiers (bus_id/eth_id)
+- Column headers show lane numbers (Lane 0 - Lane 7)
+- Cell background colors indicate values (green=good, red=bad)
+- Color legend included below heatmap
+- Summary metadata at bottom
 
-**Pivot-Ready:**
+**Histogram Format:**
 
-- Data structured for Excel pivot tables
-- Consistent column naming
-- No merged cells or formatting that breaks pivots
+- Data table with BER ranges and counts
+- Excel column chart with formatted axes
+- Multiple histograms shown separately (when querying all lanes on a port)
+- Summary metadata at bottom
+
+**Advanced Stats Format:**
+
+- Two separate tables per lane:
+  - Per-Host Statistics (one row per system)
+  - Statistics of Host Statistics (aggregated fleet metrics)
+- Bold section headers
+- Gray header backgrounds
+- Summary metadata at bottom
+
+### Worksheet Naming
+
+Worksheets are named using the pattern: `<Command> - <lane_spec>`
+
+Examples:
+
+- `Stats - all`
+- `Stats - 01:00.0/ETH07`
+- `Threshold - 01:00.0/*`
+- `Histogram - 01:00.0/ETH07/4`
+- `Training - all`
+- `Advanced Stats - */ETH07/4`
+- `Database Info`
+
+If a worksheet name already exists (e.g., running the same query twice), a counter is appended:
+
+- `Stats - all`
+- `Stats - all (2)`
+- `Stats - all (3)`
+
+### Use Cases
+
+1. **Share Results** - Export analysis to Excel for sharing with team members who prefer spreadsheets
+
+2. **Build Reports** - Create comprehensive analysis workbooks combining multiple queries
+
+3. **Offline Analysis** - Export data for further manipulation in Excel (pivot tables, custom charts)
+
+4. **Documentation** - Include formatted results in reports and presentations
+
+5. **Archive** - Save analysis snapshots with proper formatting and metadata
 
 ---
 
@@ -1331,8 +1445,8 @@ bh-analyze-systems stats "01:00.0/ETH07" --speed 200
 # 5. Check for high BER occurrences visually
 bh-analyze-systems stats all --speed 200 --format heatmap --statistic high_ber
 
-# 6. Export for sharing
-bh-analyze-systems export-excel --output analysis_summary.xlsx
+# 6. Export analysis to Excel
+bh-analyze-systems stats all --speed 200 --format heatmap --excel-output analysis_summary.xlsx
 ```
 
 ### Workflow 2: Failure Investigation
@@ -1347,11 +1461,9 @@ bh-analyze-systems training "bh-glx-c02u02/*" --format table
 # 3. Check if BER threshold also exceeded
 bh-analyze-systems threshold "bh-glx-c02u02/*"
 
-# 4. Export failures for detailed analysis
-bh-analyze-systems export-excel \
-  --output failures.xlsx \
-  --hosts bh-glx-c02u02 \
-  --status TRAINING_FAIL BER_THRESHOLD_EXCEEDED
+# 4. Export failures to Excel
+bh-analyze-systems training "bh-glx-c02u02/*" --format heatmap --excel-output failures.xlsx
+bh-analyze-systems threshold "bh-glx-c02u02/*" --format heatmap --excel-output failures.xlsx
 ```
 
 ### Workflow 3: Speed Comparison
@@ -1369,9 +1481,9 @@ bh-analyze-systems stats all --speed 200 --format heatmap --statistic avg
 bh-analyze-systems stats all --speed 100 --format heatmap --statistic high_ber
 bh-analyze-systems stats all --speed 200 --format heatmap --statistic high_ber
 
-# 4. Export both speeds for side-by-side comparison
-bh-analyze-systems export-excel --output speed_100.xlsx --speeds 100
-bh-analyze-systems export-excel --output speed_200.xlsx --speeds 200
+# 4. Export both speeds to Excel for comparison
+bh-analyze-systems stats all --speed 100 --format heatmap --excel-output speed_comparison.xlsx
+bh-analyze-systems stats all --speed 200 --format heatmap --excel-output speed_comparison.xlsx
 ```
 
 ### Workflow 4: Custom Quality Criteria
@@ -1384,9 +1496,7 @@ bh-analyze-systems custom all 1e-12 --speed 200 --format heatmap
 bh-analyze-systems custom all 1e-11 --speed 200 --format table
 
 # 3. Export for quality review
-bh-analyze-systems export-excel \
-  --output quality_review.xlsx \
-  --status PASS
+bh-analyze-systems custom all 1e-11 --speed 200 --excel-output quality_review.xlsx
 ```
 
 ### Workflow 5: Variance Analysis for Troubleshooting
@@ -1407,8 +1517,9 @@ bh-analyze-systems training 01:00.0/ETH07 --speed 200
 # 5. Use sensitive color scheme to identify marginal lanes
 bh-analyze-systems stats all --speed 200 --format heatmap --statistic avg --color-scheme sensitive
 
-# 6. Export findings for hardware team
-bh-analyze-systems export-excel --output variance_analysis.xlsx
+# 6. Export findings to Excel
+bh-analyze-systems stats all --speed 200 --format heatmap --statistic avg --excel-output variance_analysis.xlsx
+bh-analyze-systems training all --speed 200 --format heatmap --excel-output variance_analysis.xlsx
 ```
 
 ### Workflow 6: Interactive Exploration
@@ -1427,7 +1538,6 @@ bh-analyze> stats all --speed 200 --format heatmap --statistic high_ber
 bh-analyze> custom 01:00.0/* 1e-10
 bh-analyze> histogram 01:00.0/ETH07/4 --speed 200
 bh-analyze> advanced-stats */ETH07/4 --speed 200
-bh-analyze> export excel --output session_results.xlsx
 bh-analyze> exit
 ```
 
@@ -1449,8 +1559,10 @@ bh-analyze-systems advanced-stats */ETH07/4 --speed 200
 # 5. If issue is fleet-wide, check all lanes on that port
 bh-analyze-systems histogram 01:00.0/ETH07 --speed 200
 
-# 6. Export detailed findings
-bh-analyze-systems export-excel --output lane_analysis.xlsx
+# 6. Export detailed findings to Excel
+bh-analyze-systems histogram 01:00.0/ETH07/4 --speed 200 --excel-output lane_analysis.xlsx
+bh-analyze-systems advanced-stats */ETH07/4 --speed 200 --excel-output lane_analysis.xlsx
+bh-analyze-systems stats 01:00.0/ETH07 --speed 200 --format table --excel-output lane_analysis.xlsx
 ```
 
 **Use Case:** This workflow is ideal when you've identified a specific lane with issues and need to understand:
@@ -1478,10 +1590,9 @@ bh-analyze-systems histogram bh-glx-c02u02/01:00.0/ETH07/4 --speed 200
 bh-analyze-systems histogram bh-glx-c03u02/01:00.0/ETH07/4 --speed 200
 
 # 5. Export for root cause analysis
-bh-analyze-systems export-excel \
-  --output fleet_consistency.xlsx \
-  --hosts bh-glx-c02u02 bh-glx-c03u02 \
-  --speeds 200
+bh-analyze-systems histogram bh-glx-c02u02/01:00.0/ETH07/4 --speed 200 --excel-output fleet_consistency.xlsx
+bh-analyze-systems histogram bh-glx-c03u02/01:00.0/ETH07/4 --speed 200 --excel-output fleet_consistency.xlsx
+bh-analyze-systems advanced-stats */ETH07/4 --speed 200 --excel-output fleet_consistency.xlsx
 ```
 
 **Use Case:** This workflow helps you:
@@ -1502,8 +1613,9 @@ bh-analyze-systems ingest data/
 # 3. Analyze
 bh-analyze-systems stats all --speed 200 --format heatmap
 
-# 4. Generate report
-bh-analyze-systems export-excel --output jira_analysis.xlsx
+# 4. Export analysis to Excel
+bh-analyze-systems stats all --speed 200 --format heatmap --excel-output jira_analysis.xlsx
+bh-analyze-systems training all --speed 200 --format heatmap --excel-output jira_analysis.xlsx
 ```
 
 ---
@@ -1613,15 +1725,14 @@ Excel export command fails or produces corrupt file.
 
 1. Ensure output directory exists and is writable
 2. Check available disk space
-3. Try smaller export with filters:
+3. Try exporting with more specific lane selections:
 
 ```bash
-bh-analyze-systems export-excel \
-  --output test.xlsx \
-  --hosts single-system
+# Export a smaller subset
+bh-analyze-systems stats "01:00.0/ETH07" --speed 200 --excel-output test.xlsx
 ```
 
-1. Update openpyxl package:
+4. Update openpyxl package:
 
 ```bash
 pip install --upgrade openpyxl
