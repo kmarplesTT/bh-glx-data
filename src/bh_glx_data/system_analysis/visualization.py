@@ -80,7 +80,7 @@ COUNT_COLOR_SCHEMES = {
 # Built-in BER heatmap color schemes
 BER_COLOR_SCHEMES = {
     "default": ColorScheme(
-        thresholds=[(1e-8, GREEN), (5e-8, YELLOW_GREEN), (1e-7, YELLOW), (5e-7, ORANGE), (1e-6, RED)],
+        thresholds=[(5e-8, GREEN), (1e-7, YELLOW_GREEN), (5e-7, YELLOW), (1e-6, ORANGE), (5e-6, RED)],
         default_color=RED,
     ),
     "sensitive": ColorScheme(
