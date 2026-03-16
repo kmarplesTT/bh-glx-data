@@ -545,30 +545,27 @@ Systems: 2  |  Total Samples: 301  |  Speeds: 200
 The command performs two-level aggregation:
 
 1. **First Level (Per-Host Statistics):**
-   - For each system, calculate min/avg/max BER across all test samples for the specified lane
-   - Display in the "Per-Host Statistics" table
-
+  - For each system, calculate min/avg/max BER across all test samples for the specified lane
+  - Display in the "Per-Host Statistics" table
 2. **Second Level (Statistics of Statistics):**
-   - Take the per-host min values and calculate min/avg/max of those values
-   - Take the per-host avg values and calculate min/avg/max of those values
-   - Take the per-host max values and calculate min/avg/max of those values
-   - Display in the "Statistics of Host Statistics" table
+  - Take the per-host min values and calculate min/avg/max of those values
+  - Take the per-host avg values and calculate min/avg/max of those values
+  - Take the per-host max values and calculate min/avg/max of those values
+  - Display in the "Statistics of Host Statistics" table
 
 **Interpreting Results:**
 
 The "Statistics of Host Statistics" table reveals fleet-wide performance patterns:
 
 - **MIN row** - Shows the range of best-case performance across systems
-   - Narrow range (min≈max) = Consistent best-case performance
-   - Wide range (min<<max) = Some systems perform much better than others at their best
-
+  - Narrow range (min≈max) = Consistent best-case performance
+  - Wide range (min<<max) = Some systems perform much better than others at their best
 - **AVG row** - Shows the range of typical performance across systems
-   - Narrow range = All systems perform similarly on average
-   - Wide range = Significant variation in typical performance across fleet
-
+  - Narrow range = All systems perform similarly on average
+  - Wide range = Significant variation in typical performance across fleet
 - **MAX row** - Shows the range of worst-case performance across systems
-   - Narrow range = Worst-case behavior is consistent
-   - Wide range = Some systems experience much worse spikes than others
+  - Narrow range = Worst-case behavior is consistent
+  - Wide range = Some systems experience much worse spikes than others
 
 **Use Cases:**
 
@@ -581,27 +578,33 @@ The "Statistics of Host Statistics" table reveals fleet-wide performance pattern
 **Example Interpretations:**
 
 **Scenario 1: Consistent Fleet**
+
 ```
 MIN: min=1e-12, avg=1.1e-12, max=1.2e-12
 AVG: min=2e-11, avg=2.1e-11, max=2.2e-11
 MAX: min=3e-10, avg=3.2e-10, max=3.5e-10
 ```
+
 Interpretation: All systems perform very similarly. Narrow ranges in all metrics indicate consistent hardware quality and environmental conditions.
 
 **Scenario 2: Outlier System**
+
 ```
 MIN: min=5e-13, avg=1e-12, max=5e-12
 AVG: min=1e-11, avg=2e-11, max=8e-11
 MAX: min=3e-10, avg=4e-10, max=2e-09
 ```
+
 Interpretation: Wide ranges suggest one or more outlier systems. The system with max=2e-09 should be investigated for hardware or environmental issues.
 
 **Scenario 3: Variable Performance**
+
 ```
 MIN: min=1e-12, avg=1.1e-12, max=1.2e-12
 AVG: min=2e-11, avg=2.2e-11, max=2.4e-11
 MAX: min=5e-10, avg=8e-10, max=5e-09
 ```
+
 Interpretation: Good consistency in typical performance (MIN and AVG), but wide range in MAX suggests some systems experience occasional severe spikes. This could indicate environmental sensitivity (temperature, power, cables).
 
 **Tips:**
@@ -800,20 +803,21 @@ The lane selection syntax allows flexible queries across systems, ports, and lan
 
 ### Syntax Patterns
 
-| Pattern                      | Description                      | Example                           |
-| ---------------------------- | -------------------------------- | --------------------------------- |
-| `all`                        | All lanes on all systems         | `all`                             |
-| `BUS_ID/ETH_PORT`            | Specific port, all lanes         | `01:00.0/ETH07`                   |
-| `BUS_ID/ETH_PORT/LANE`       | Specific lane on port            | `01:00.0/ETH07/4`                 |
-| `BUS_ID/*`                   | All ports on bus ID              | `01:00.0/*`                       |
-| `HOST/BUS_ID/ETH_PORT`       | Specific system and port         | `bh-glx-c02u02/01:00.0/ETH07`     |
-| `HOST/BUS_ID/ETH_PORT/LANE`  | Specific lane on system          | `bh-glx-c02u02/01:00.0/ETH07/4`   |
-| `HOST/*`                     | All ports on system              | `bh-glx-c02u02/*`                 |
-| `*/ETH_PORT`                 | Specific port on all systems     | `*/ETH07`                         |
-| `*/ETH_PORT/LANE`            | Specific lane across all systems | `*/ETH07/4`                       |
+
+| Pattern                     | Description                      | Example                         |
+| --------------------------- | -------------------------------- | ------------------------------- |
+| `all`                       | All lanes on all systems         | `all`                           |
+| `BUS_ID/ETH_PORT`           | Specific port, all lanes         | `01:00.0/ETH07`                 |
+| `BUS_ID/ETH_PORT/LANE`      | Specific lane on port            | `01:00.0/ETH07/4`               |
+| `BUS_ID/`*                  | All ports on bus ID              | `01:00.0/*`                     |
+| `HOST/BUS_ID/ETH_PORT`      | Specific system and port         | `bh-glx-c02u02/01:00.0/ETH07`   |
+| `HOST/BUS_ID/ETH_PORT/LANE` | Specific lane on system          | `bh-glx-c02u02/01:00.0/ETH07/4` |
+| `HOST/*`                    | All ports on system              | `bh-glx-c02u02/*`               |
+| `*/ETH_PORT`                | Specific port on all systems     | `*/ETH07`                       |
+| `*/ETH_PORT/LANE`           | Specific lane across all systems | `*/ETH07/4`                     |
+
 
 **New in v0.6.0:** Lane numbers (0-7) can be specified as the fourth component to target individual serdes lanes.
-
 
 ### Examples
 
@@ -950,11 +954,13 @@ bh-analyze-systems stats all --format table --speed 200
 #### Understanding the Average BER Heatmap
 
 Each cell displays:
+
 - **BER value**: Average BER across all test runs
 - **Color**: Indicates BER magnitude (green=good, red=bad)
 - **Symbol**: Indicates consistency/variance (always shown for avg statistic)
 
 **Variance Symbols:**
+
 - `●` Very Consistent (max/avg < 2) - Stable, predictable performance
 - `◆` Consistent (max/avg 2-10) - Minor fluctuations
 - `▲` Moderate Variance (max/avg 10-100) - Noticeable spikes
@@ -964,15 +970,18 @@ Each cell displays:
 #### Diagnostic Patterns
 
 **Healthy Lanes:**
+
 - Green `●` or `◆` = Excellent and consistent
 - Yellow `●` or `◆` = Good and consistent
 
 **Problem Lanes:**
+
 - Orange/Red `●` or `◆` = Persistent hardware issues (consistent failures)
 - Green/Yellow `■` or `✕` = Intermittent issues (cable, power, thermal)
 - Orange/Red `■` or `✕` = Severe and unstable (critical problem)
 
 **Troubleshooting Tips:**
+
 - `✕` symbol → Investigate environmental factors (cables, power, temperature)
 - Consistent `●`/`◆` symbols with high BER → Hardware fault (replace component)
 - Pattern on specific lanes → Serdes lane issue
@@ -985,6 +994,7 @@ Each cell displays:
 ```
 
 Interpretation:
+
 - Lane 0: Excellent and very consistent (`●`)
 - Lanes 1-2: Marginal with moderate spikes (`▲`) - monitor
 - Lane 3: Good average BUT extreme spikes (`✕`) - investigate cables/environment
@@ -1001,24 +1011,22 @@ Heatmaps use configurable color schemes to represent values.
 **Built-in Schemes:**
 
 1. **default** - Gradual color progression
-   - Green: 0 failures
-   - Yellow: 1-10 failures
-   - Bright Yellow: 11-24 failures
-   - Orange: 25-49 failures
-   - Red: 50+ failures
-
+  - Green: 0 failures
+  - Yellow: 1-10 failures
+  - Bright Yellow: 11-24 failures
+  - Orange: 25-49 failures
+  - Red: 50+ failures
 2. **strict** - Low tolerance for failures
-   - Green: 0 failures
-   - Yellow: 1-4 failures
-   - Orange: 5-9 failures
-   - Red: 10+ failures
-
+  - Green: 0 failures
+  - Yellow: 1-4 failures
+  - Orange: 5-9 failures
+  - Red: 10+ failures
 3. **tolerant** - Higher tolerance for failures
-   - Green: 0 failures
-   - Yellow: 1-19 failures
-   - Bright Yellow: 20-49 failures
-   - Orange: 50-99 failures
-   - Red: 100+ failures
+  - Green: 0 failures
+  - Yellow: 1-19 failures
+  - Bright Yellow: 20-49 failures
+  - Orange: 50-99 failures
+  - Red: 100+ failures
 
 **Threshold Logic:** Colors are assigned based on upper bounds. For example, with the default scheme, a count of 10 shows as yellow (count <= 10), while 11 shows as bright yellow (10 < count <= 24).
 
@@ -1040,28 +1048,26 @@ bh-analyze-systems training all --format heatmap --color-scheme tolerant
 **Built-in Schemes:**
 
 1. **default** - Standard BER thresholds
-   - Green: BER <= 1e-12
-   - Yellow: 1e-12 < BER <= 1e-8
-   - Bright Yellow: 1e-8 < BER <= 1e-7
-   - Orange: 1e-7 < BER <= 5e-7
-   - Red: 5e-7 < BER <= 1e-6
-   - Bright Red: BER > 1e-6
-
+  - Green: BER <= 1e-12
+  - Yellow: 1e-12 < BER <= 1e-8
+  - Bright Yellow: 1e-8 < BER <= 1e-7
+  - Orange: 1e-7 < BER <= 5e-7
+  - Red: 5e-7 < BER <= 1e-6
+  - Bright Red: BER > 1e-6
 2. **sensitive** - Stricter thresholds (lower tolerance)
-   - Green: BER <= 1e-12
-   - Yellow: 1e-12 < BER <= 1e-9
-   - Bright Yellow: 1e-9 < BER <= 1e-8
-   - Orange: 1e-8 < BER <= 5e-8
-   - Red: 5e-8 < BER <= 1e-7
-   - Bright Red: BER > 1e-7
-
+  - Green: BER <= 1e-12
+  - Yellow: 1e-12 < BER <= 1e-9
+  - Bright Yellow: 1e-9 < BER <= 1e-8
+  - Orange: 1e-8 < BER <= 5e-8
+  - Red: 5e-8 < BER <= 1e-7
+  - Bright Red: BER > 1e-7
 3. **tolerant** - Relaxed thresholds (higher tolerance)
-   - Green: BER <= 1e-12
-   - Yellow: 1e-12 < BER <= 1e-7
-   - Bright Yellow: 1e-7 < BER <= 1e-6
-   - Orange: 1e-6 < BER <= 5e-6
-   - Red: 5e-6 < BER <= 1e-5
-   - Bright Red: BER > 1e-5
+  - Green: BER <= 1e-12
+  - Yellow: 1e-12 < BER <= 1e-7
+  - Bright Yellow: 1e-7 < BER <= 1e-6
+  - Orange: 1e-6 < BER <= 5e-6
+  - Red: 5e-6 < BER <= 1e-5
+  - Bright Red: BER > 1e-5
 
 **Threshold Logic:** Colors are assigned based on upper bounds. For example, with the default scheme, BER of 1e-12 shows as green (BER <= 1e-12), while 5e-12 shows as yellow (1e-12 < BER <= 1e-8).
 
@@ -1448,6 +1454,7 @@ bh-analyze-systems export-excel --output lane_analysis.xlsx
 ```
 
 **Use Case:** This workflow is ideal when you've identified a specific lane with issues and need to understand:
+
 - Is the BER distribution clustered or spread? (histogram)
 - Is this lane problematic on all systems or just one? (advanced-stats)
 - What's the performance consistency across the fleet? (advanced-stats statistics of statistics)
@@ -1478,6 +1485,7 @@ bh-analyze-systems export-excel \
 ```
 
 **Use Case:** This workflow helps you:
+
 - Identify systems performing differently from the fleet average
 - Understand if issues are hardware-specific or environmental
 - Prioritize which systems need attention first
@@ -1613,7 +1621,7 @@ bh-analyze-systems export-excel \
   --hosts single-system
 ```
 
-4. Update openpyxl package:
+1. Update openpyxl package:
 
 ```bash
 pip install --upgrade openpyxl
