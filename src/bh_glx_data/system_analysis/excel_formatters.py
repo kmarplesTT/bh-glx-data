@@ -21,17 +21,18 @@ from bh_glx_data.system_analysis.visualization import ColorScheme
 logger = logging.getLogger(__name__)
 
 # Terminal color to Excel hex color mapping (ARGB format with FF alpha prefix)
+# Using lighter colors (matching histogram gradient) for better readability with black text
 TERMINAL_TO_EXCEL_COLOR_MAP = {
-    "color(28)": "FF006400",  # GREEN -> dark green
-    "color(106)": "FF9ACD32",  # YELLOW_GREEN -> yellow-green
+    "color(28)": "FF4CAF50",  # GREEN -> medium green (better with black text)
+    "color(106)": "FF9DC34D",  # YELLOW_GREEN -> yellow-green
     "color(184)": "FFFFD700",  # YELLOW -> gold
-    "color(172)": "FFFF8C00",  # ORANGE -> dark orange
-    "color(124)": "FF8B0000",  # RED -> dark red
+    "color(172)": "FFFFA500",  # ORANGE -> orange
+    "color(124)": "FFDC143C",  # RED -> crimson red
     # Default colors
-    "green": "FF006400",
+    "green": "FF4CAF50",
     "yellow": "FFFFD700",
-    "orange": "FFFF8C00",
-    "red": "FF8B0000",
+    "orange": "FFFFA500",
+    "red": "FFDC143C",
 }
 
 
@@ -136,29 +137,7 @@ def map_terminal_color_to_excel(terminal_color: str) -> str:
     return TERMINAL_TO_EXCEL_COLOR_MAP.get(terminal_color, "FFFFFFFF")  # Default to white
 
 
-def should_use_white_font(hex_color: str) -> bool:
-    """Determine if white font should be used on a given background color.
-
-    Args:
-        hex_color: Excel hex color with alpha channel (e.g., "FF006400")
-
-    Returns:
-        True if white font should be used, False otherwise
-    """
-    # Remove alpha channel if present
-    if len(hex_color) == 8:
-        hex_color = hex_color[2:]
-
-    # Convert hex to RGB
-    r = int(hex_color[0:2], 16)
-    g = int(hex_color[2:4], 16)
-    b = int(hex_color[4:6], 16)
-
-    # Calculate relative luminance using the formula from WCAG
-    # If luminance is low (dark color), use white font
-    luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255
-
-    return luminance < 0.5  # Use white font for dark backgrounds
+# Removed should_use_white_font function - all heatmaps now use black text
 
 
 def get_excel_color_for_value(
@@ -285,8 +264,10 @@ def write_table_to_worksheet(
             cell = ws.cell(row, col_idx, value)
 
             # Apply column-specific number formatting if specified
-            if column_formats and header in column_formats and isinstance(value, (int, float)):
-                cell.number_format = column_formats[header]
+            # Only apply to numeric values (not empty strings or None)
+            if column_formats and header in column_formats:
+                if isinstance(value, (int, float)) and value != "":
+                    cell.number_format = column_formats[header]
         row += 1
 
     # Adjust column widths
@@ -392,13 +373,9 @@ def write_heatmap_to_worksheet(
                 else:
                     cell.value = int(value)
 
-                # Apply color
+                # Apply color (background only - use black text for all values)
                 color = get_excel_color_for_value(value, color_scheme, is_ber_metric)
                 apply_cell_background_color(cell, color)
-
-                # Use white font on dark backgrounds for readability
-                if should_use_white_font(color):
-                    cell.font = Font(color=Color(rgb="FFFFFFFF"))  # White font
 
                 cell.alignment = Alignment(horizontal="center")
             else:
@@ -504,17 +481,79 @@ def write_histogram_to_worksheet(
         chart.x_axis.title = "BER Range"
         chart.y_axis.title = "Count"
 
+        # Set chart dimensions (width x height in EMUs; 15 chars ≈ 1 inch, 20 rows ≈ 1 inch)
+        chart.width = 18  # Width in inches
+        chart.height = 10  # Height in inches
+
+        # Style settings
+        chart.style = 10  # Use a clean, professional style
+        chart.legend = None  # Remove legend (not needed for single series)
+
+        # Remove horizontal grid lines for cleaner appearance
+        chart.y_axis.majorGridlines = None
+
         # Add data
         data = Reference(ws, min_col=2, min_row=start_row - 1, max_row=row - 1)
         cats = Reference(ws, min_col=1, min_row=start_row, max_row=row - 1)
         chart.add_data(data, titles_from_data=True)
         chart.set_categories(cats)
 
+        # Format the data series (bars)
+        series = chart.series[0]
+        series.graphicalProperties.solidFill = "4472C4"  # Professional blue color
+
+        # Format individual data points with gradient colors based on bin position
+        from openpyxl.drawing.fill import GradientFillProperties, GradientStop, ColorChoice
+        num_bins = len(hist.bins)
+        for idx in range(num_bins):
+            # Create gradient from green (good) to red (bad)
+            ratio = idx / max(num_bins - 1, 1)
+            if ratio < 0.5:
+                # Green to yellow
+                r = int(76 + (255 - 76) * (ratio * 2))
+                g = int(175 + (215 - 175) * (ratio * 2))
+                b = int(80 + (0 - 80) * (ratio * 2))
+            else:
+                # Yellow to red
+                r = 255
+                g = int(215 - (215 - 0) * ((ratio - 0.5) * 2))
+                b = 0
+
+            hex_color = f"{r:02X}{g:02X}{b:02X}"
+            pt = DataPoint(idx=idx)
+            pt.graphicalProperties.solidFill = hex_color
+            series.dPt.append(pt)
+
         # Position chart
         chart_cell = f"D{start_row - 1}"
         ws.add_chart(chart, chart_cell)
 
-        row += 2  # Spacing between histograms
+        # Add color legend below data table
+        legend_start_row = row
+        ws.cell(legend_start_row, 1, "Color Legend:")
+        ws.cell(legend_start_row, 1).font = Font(bold=True)
+        legend_start_row += 1
+
+        # Create gradient legend entries (Low BER = Green, High BER = Red)
+        legend_entries = [
+            ("Low BER (Best)", "4CAF50"),      # Green
+            ("", "9DC34D"),                    # Yellow-green
+            ("Medium BER", "FFD700"),          # Yellow
+            ("", "FFA500"),                    # Orange
+            ("High BER (Worst)", "DC143C"),    # Red
+        ]
+
+        for label, hex_color in legend_entries:
+            if label:  # Only show text for first, middle, and last entries
+                ws.cell(legend_start_row, 1, label)
+            # Apply background color to legend cell
+            color_cell = ws.cell(legend_start_row, 2, "")
+            color_cell.fill = PatternFill(
+                start_color=hex_color, end_color=hex_color, fill_type="solid"
+            )
+            legend_start_row += 1
+
+        row = legend_start_row + 2  # Spacing between histograms
 
     # Adjust column widths
     ws.column_dimensions["A"].width = 20

@@ -62,33 +62,35 @@ class ColorScheme:
 
 
 # Built-in count heatmap color schemes
+# Simple gradient: Green → Yellow-Green → Yellow → Orange → Red (matching histogram style)
 COUNT_COLOR_SCHEMES = {
     "default": ColorScheme(
-        thresholds=[(0, GREEN), (1, YELLOW_GREEN), (11, YELLOW), (25, ORANGE), (50, RED)],
+        thresholds=[(0, GREEN), (1, YELLOW_GREEN), (5, YELLOW), (10, ORANGE)],
         default_color=RED,
     ),
     "strict": ColorScheme(
-        thresholds=[(0, GREEN), (1, YELLOW), (5, RED)],
+        thresholds=[(0, GREEN), (1, YELLOW), (3, ORANGE)],
         default_color=RED,
     ),
     "relaxed": ColorScheme(
-        thresholds=[(0, GREEN), (5, YELLOW_GREEN), (20, YELLOW), (50, ORANGE), (100, RED)],
+        thresholds=[(0, GREEN), (5, YELLOW_GREEN), (15, YELLOW), (30, ORANGE)],
         default_color=RED,
     ),
 }
 
 # Built-in BER heatmap color schemes
+# Simple gradient: Green → Yellow-Green → Yellow → Orange → Red (matching histogram style)
 BER_COLOR_SCHEMES = {
     "default": ColorScheme(
-        thresholds=[(5e-8, GREEN), (1e-7, YELLOW_GREEN), (5e-7, YELLOW), (1e-6, ORANGE), (5e-6, RED)],
+        thresholds=[(1e-8, GREEN), (1e-7, YELLOW_GREEN), (1e-6, YELLOW), (1e-5, ORANGE)],
         default_color=RED,
     ),
     "sensitive": ColorScheme(
-        thresholds=[(1e-9, GREEN), (5e-9, YELLOW_GREEN), (1e-8, YELLOW), (5e-8, ORANGE), (1e-7, RED)],
+        thresholds=[(1e-9, GREEN), (1e-8, YELLOW_GREEN), (1e-7, YELLOW), (1e-6, ORANGE)],
         default_color=RED,
     ),
     "tolerant": ColorScheme(
-        thresholds=[(1e-6, GREEN), (5e-6, YELLOW_GREEN), (1e-5, YELLOW), (5e-5, ORANGE), (1e-4, RED)],
+        thresholds=[(1e-7, GREEN), (1e-6, YELLOW_GREEN), (1e-5, YELLOW), (1e-4, ORANGE)],
         default_color=RED,
     ),
 }

@@ -186,7 +186,7 @@ class TestExportBERStatistics:
 
         assert isinstance(result, ExcelExportResult)
         assert result.output_path == output_path
-        assert result.worksheet_name == "Stats - all"
+        assert result.worksheet_name == "Stats - table"
         assert result.rows_written == 2
         assert result.file_existed is False
 
@@ -195,9 +195,9 @@ class TestExportBERStatistics:
 
         # Verify worksheet content
         wb = load_workbook(output_path)
-        assert "Stats - all" in wb.sheetnames
+        assert "Stats - table" in wb.sheetnames
 
-        ws = wb["Stats - all"]
+        ws = wb["Stats - table"]
         # Header row (after title and spacing)
         assert ws.cell(3, 1).value == "bus_id"
         assert ws.cell(3, 2).value == "eth_id"
@@ -205,7 +205,7 @@ class TestExportBERStatistics:
         # Data row
         assert ws.cell(4, 1).value == "01:00.0"  # bus_id
         assert ws.cell(4, 2).value == "ETH07"  # eth_id
-        assert ws.cell(4, 3).value == "0"  # lane number
+        assert ws.cell(4, 3).value == 0  # lane number (now numeric)
 
     def test_export_heatmap_format(self, exporter, sample_ber_statistics, tmp_path):
         """Test exporting BER statistics in heatmap format."""
@@ -220,12 +220,12 @@ class TestExportBERStatistics:
             color_scheme=color_scheme,
         )
 
-        assert result.worksheet_name == "Stats - 01_00.0_ETH07"
+        assert result.worksheet_name == "Stats - heatmap - max"
         assert result.rows_written == 2
 
         # Verify heatmap structure
         wb = load_workbook(output_path)
-        ws = wb["Stats - 01_00.0_ETH07"]
+        ws = wb["Stats - heatmap - max"]
         assert ws.cell(1, 1).value  # Has header/port column
 
     def test_export_to_existing_file(self, exporter, sample_ber_statistics, tmp_path):
@@ -238,22 +238,22 @@ class TestExportBERStatistics:
         )
         assert result1.file_existed is False
 
-        # Second export to same file
+        # Second export to same file (same format, will create collision)
         result2 = exporter.export_ber_statistics(
             sample_ber_statistics, output_path, lane_spec="01:00.0/*", format="table"
         )
         assert result2.file_existed is True
 
-        # Verify both worksheets exist
+        # Verify both worksheets exist (both named "Stats - table" with collision numbering)
         wb = load_workbook(output_path)
-        assert "Stats - all" in wb.sheetnames
-        assert "Stats - 01_00.0__" in wb.sheetnames
+        assert "Stats - table" in wb.sheetnames
+        assert "Stats - table (2)" in wb.sheetnames
 
     def test_export_worksheet_name_collision(self, exporter, sample_ber_statistics, tmp_path):
         """Test handling worksheet name collisions."""
         output_path = tmp_path / "test.xlsx"
 
-        # Export same lane spec multiple times
+        # Export same format multiple times (all default to table)
         result1 = exporter.export_ber_statistics(
             sample_ber_statistics, output_path, lane_spec="all"
         )
@@ -264,9 +264,9 @@ class TestExportBERStatistics:
             sample_ber_statistics, output_path, lane_spec="all"
         )
 
-        assert result1.worksheet_name == "Stats - all"
-        assert result2.worksheet_name == "Stats - all (2)"
-        assert result3.worksheet_name == "Stats - all (3)"
+        assert result1.worksheet_name == "Stats - table"
+        assert result2.worksheet_name == "Stats - table (2)"
+        assert result3.worksheet_name == "Stats - table (3)"
 
 
 class TestExportCountData:
@@ -280,11 +280,11 @@ class TestExportCountData:
             sample_threshold_counts, output_path, lane_spec="all", format="table"
         )
 
-        assert result.worksheet_name == "Threshold - all"
+        assert result.worksheet_name == "Threshold - table"
         assert result.rows_written == 2
 
         wb = load_workbook(output_path)
-        assert "Threshold - all" in wb.sheetnames
+        assert "Threshold - table" in wb.sheetnames
 
     def test_export_custom_threshold_counts(self, exporter, sample_custom_threshold_counts, tmp_path):
         """Test exporting custom threshold counts."""
@@ -294,16 +294,16 @@ class TestExportCountData:
             sample_custom_threshold_counts, output_path, lane_spec="01:00.0/*", format="table"
         )
 
-        assert result.worksheet_name == "Custom - 01_00.0__"
+        assert result.worksheet_name == "Custom - table"
 
         # Verify threshold is included in metadata
         wb = load_workbook(output_path)
-        ws = wb["Custom - 01_00.0__"]
-        # Threshold should appear somewhere in the worksheet
+        ws = wb["Custom - table"]
+        # Threshold should appear somewhere in the worksheet (as numeric value now)
         found_threshold = False
         for row in ws.iter_rows():
             for cell in row:
-                if cell.value and "1.00e-10" in str(cell.value):
+                if cell.value and isinstance(cell.value, float) and abs(cell.value - 1e-10) < 1e-15:
                     found_threshold = True
                     break
             if found_threshold:
@@ -318,7 +318,7 @@ class TestExportCountData:
             sample_training_counts, output_path, lane_spec="all", format="table"
         )
 
-        assert result.worksheet_name == "Training - all"
+        assert result.worksheet_name == "Training - table"
 
     def test_export_count_heatmap_format(self, exporter, sample_threshold_counts, tmp_path):
         """Test exporting counts in heatmap format."""
@@ -337,7 +337,7 @@ class TestExportCountData:
 
         # Verify heatmap structure
         wb = load_workbook(output_path)
-        ws = wb["Threshold - all"]
+        ws = wb["Threshold - heatmap"]
         # Should have port column and lane columns
         assert ws.cell(1, 1).value  # Port column header
 
@@ -351,11 +351,11 @@ class TestExportHistogram:
 
         result = exporter.export_histogram(sample_histogram, output_path, lane_spec="01:00.0/ETH07/0")
 
-        assert result.worksheet_name == "Histogram - 01_00.0_ETH07_0"
+        assert result.worksheet_name == "Histogram - chart"
         assert result.rows_written == 4  # 4 bins
 
         wb = load_workbook(output_path)
-        ws = wb["Histogram - 01_00.0_ETH07_0"]
+        ws = wb["Histogram - chart"]
 
         # Check histogram title (contains lane_spec)
         assert "01:00.0/ETH07/0" in str(ws.cell(1, 1).value)
@@ -390,7 +390,7 @@ class TestExportHistogram:
         assert result.rows_written == 2  # 2 bins total
 
         wb = load_workbook(output_path)
-        ws = wb["Histogram - all"]
+        ws = wb["Histogram - chart"]
 
         # Both histograms should be present
         found_lane0 = False
@@ -417,13 +417,13 @@ class TestExportAdvancedStats:
             sample_aggregated_stats, output_path, lane_spec="01:00.0/ETH07/0"
         )
 
-        # Name is truncated due to 31-char limit
-        assert result.worksheet_name == "Advanced Stats - 01_00.0_E..."
+        # New format doesn't include lane_spec
+        assert result.worksheet_name == "Advanced Stats - table"
         # 2 host rows + 3 stats-of-stats rows
         assert result.rows_written == 5
 
         wb = load_workbook(output_path)
-        ws = wb["Advanced Stats - 01_00.0_E..."]
+        ws = wb["Advanced Stats - table"]
 
         # Check per-host table
         assert "Per-Host Statistics" in str(ws.cell(3, 1).value)
@@ -511,12 +511,13 @@ class TestExportDatabaseInfo:
         # Check database info appears
         assert ws.cell(3, 1).value == "Property"  # Header row (after title)
 
-        # Check specific properties
+        # Check specific properties - now stored as numeric value
         found_total_tests = False
         for row in ws.iter_rows():
             if row[0].value == "Total Tests":
                 found_total_tests = True
-                assert "1,000" in str(row[1].value)
+                # Value should be numeric (1000), not string ("1,000")
+                assert row[1].value == 1000
                 break
 
         assert found_total_tests

@@ -385,6 +385,7 @@ def handle_stats(db: DatabaseManager, args: argparse.Namespace) -> int:
                 lane_spec=args.lane_spec,
                 format=args.format,
                 color_scheme=color_scheme,
+                statistic=args.statistic,
             )
             logger.info(f"\nExported to: {export_result.output_path}")
             logger.info(f"Worksheet: {export_result.worksheet_name}")

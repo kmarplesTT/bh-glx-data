@@ -97,6 +97,7 @@ class ExcelExporter:
         lane_spec: str,
         format: str = "table",
         color_scheme: Optional[ColorScheme] = None,
+        statistic: str = "max",
     ) -> ExcelExportResult:
         """Export BER statistics to Excel (table or heatmap format).
 
@@ -106,6 +107,7 @@ class ExcelExporter:
             lane_spec: Lane specification string for worksheet name
             format: "table" or "heatmap"
             color_scheme: Optional color scheme for heatmap
+            statistic: Statistic to display (avg, min, max, high_ber) - for heatmap
 
         Returns:
             ExcelExportResult with export details
@@ -120,8 +122,11 @@ class ExcelExporter:
             # Create or open workbook
             wb, file_existed = create_or_open_workbook(output_path)
 
-            # Generate worksheet name
-            base_name = f"Stats - {sanitize_worksheet_name(lane_spec)}"
+            # Generate worksheet name: "Stats - <format> - <statistic>"
+            if format == "heatmap":
+                base_name = f"Stats - heatmap - {statistic}"
+            else:
+                base_name = "Stats - table"
             ws_name = generate_unique_worksheet_name(wb, base_name)
             ws = wb.create_sheet(ws_name)
 
@@ -155,20 +160,28 @@ class ExcelExporter:
                 rows_written = len(data["bus_id"])
 
             else:  # heatmap
-                # For heatmap, we need a specific statistic (max, avg, min, high_ber, variance)
-                # This will be determined by the CLI; default to max
+                # For heatmap, use the specified statistic
                 lane_data = {}
                 for lane_id, lane_stat in stats.lane_stats.items():
-                    # Default to max_ber for heatmap
-                    lane_data[lane_id] = lane_stat.max_ber
+                    if statistic == "avg":
+                        lane_data[lane_id] = lane_stat.avg_ber
+                    elif statistic == "min":
+                        lane_data[lane_id] = lane_stat.min_ber
+                    elif statistic == "high_ber":
+                        lane_data[lane_id] = lane_stat.high_ber_count
+                    else:  # max (default)
+                        lane_data[lane_id] = lane_stat.max_ber
+
+                # Add statistic name to metadata for display under heading
+                metadata_with_stat = {**metadata, "Statistic": statistic.upper()}
 
                 write_heatmap_to_worksheet(
                     ws,
                     lane_data,
                     color_scheme or BER_COLOR_SCHEMES["default"],  # Use default if none provided
-                    is_ber_metric=True,
+                    is_ber_metric=(statistic != "high_ber"),  # high_ber is count metric
                     title=f"BER Statistics Heatmap - {lane_spec}",
-                    metadata=metadata,
+                    metadata=metadata_with_stat,
                 )
                 rows_written = len(lane_data)
 
@@ -227,8 +240,8 @@ class ExcelExporter:
             else:
                 cmd_type = "Counts"
 
-            # Generate worksheet name
-            base_name = f"{cmd_type} - {sanitize_worksheet_name(lane_spec)}"
+            # Generate worksheet name: "<command> - <format>"
+            base_name = f"{cmd_type} - {format}"
             ws_name = generate_unique_worksheet_name(wb, base_name)
             ws = wb.create_sheet(ws_name)
 
@@ -239,21 +252,18 @@ class ExcelExporter:
                 "Train Speeds": list(counts.train_speeds) if counts.train_speeds else "All",
             }
 
+            # Add threshold to metadata for custom command (will appear under heading)
             if isinstance(counts, CustomThresholdCounts):
-                metadata["Threshold"] = f"{counts.threshold:.2e}"
+                metadata["BER Threshold"] = counts.threshold  # Store as number for proper formatting
 
             if format == "table":
-                # Prepare table data
-                data = {"Lane": [], "Count": []}
-                for lane_id in sorted(counts.lane_counts.keys()):
-                    data["Lane"].append(lane_id)
-                    data["Count"].append(counts.lane_counts[lane_id])
-
-                headers = ["Lane", "Count"]
+                # Prepare table data with separate columns for bus_id, eth_id, lane
+                data = self._prepare_count_table_data(counts)
+                headers = ["bus_id", "eth_id", "lane", "Count"]
                 write_table_to_worksheet(
                     ws, data, headers, title=f"{cmd_type} Counts - {lane_spec}", metadata=metadata
                 )
-                rows_written = len(data["Lane"])
+                rows_written = len(data["bus_id"])
 
             else:  # heatmap
                 write_heatmap_to_worksheet(
@@ -307,8 +317,8 @@ class ExcelExporter:
             # Create or open workbook
             wb, file_existed = create_or_open_workbook(output_path)
 
-            # Generate worksheet name
-            base_name = f"Histogram - {sanitize_worksheet_name(lane_spec)}"
+            # Generate worksheet name: "Histogram - chart"
+            base_name = "Histogram - chart"
             ws_name = generate_unique_worksheet_name(wb, base_name)
             ws = wb.create_sheet(ws_name)
 
@@ -381,8 +391,8 @@ class ExcelExporter:
             # Create or open workbook
             wb, file_existed = create_or_open_workbook(output_path)
 
-            # Generate worksheet name
-            base_name = f"Advanced Stats - {sanitize_worksheet_name(lane_spec)}"
+            # Generate worksheet name: "Advanced Stats - table"
+            base_name = "Advanced Stats - table"
             ws_name = generate_unique_worksheet_name(wb, base_name)
             ws = wb.create_sheet(ws_name)
 
@@ -400,7 +410,6 @@ class ExcelExporter:
             from bh_glx_data.system_analysis.excel_formatters import (
                 apply_cell_background_color,
                 get_excel_color_for_value,
-                should_use_white_font,
             )
 
             for agg_stats in stats_list:
@@ -434,11 +443,9 @@ class ExcelExporter:
                     if host_stat.min_ber is not None:
                         min_cell.value = host_stat.min_ber
                         min_cell.number_format = "0.00E+00"
-                        # Apply color scheme
+                        # Apply color scheme (background only - use black text)
                         color = get_excel_color_for_value(host_stat.min_ber, effective_color_scheme, is_ber_metric=True)
                         apply_cell_background_color(min_cell, color)
-                        if should_use_white_font(color):
-                            min_cell.font = Font(color=Color(rgb="FFFFFFFF"))
                     else:
                         min_cell.value = "-"
 
@@ -447,11 +454,9 @@ class ExcelExporter:
                     if host_stat.avg_ber is not None:
                         avg_cell.value = host_stat.avg_ber
                         avg_cell.number_format = "0.00E+00"
-                        # Apply color scheme
+                        # Apply color scheme (background only - use black text)
                         color = get_excel_color_for_value(host_stat.avg_ber, effective_color_scheme, is_ber_metric=True)
                         apply_cell_background_color(avg_cell, color)
-                        if should_use_white_font(color):
-                            avg_cell.font = Font(color=Color(rgb="FFFFFFFF"))
                     else:
                         avg_cell.value = "-"
 
@@ -460,11 +465,9 @@ class ExcelExporter:
                     if host_stat.max_ber is not None:
                         max_cell.value = host_stat.max_ber
                         max_cell.number_format = "0.00E+00"
-                        # Apply color scheme
+                        # Apply color scheme (background only - use black text)
                         color = get_excel_color_for_value(host_stat.max_ber, effective_color_scheme, is_ber_metric=True)
                         apply_cell_background_color(max_cell, color)
-                        if should_use_white_font(color):
-                            max_cell.font = Font(color=Color(rgb="FFFFFFFF"))
                     else:
                         max_cell.value = "-"
 
@@ -503,11 +506,9 @@ class ExcelExporter:
                     if min_val is not None:
                         min_cell.value = min_val
                         min_cell.number_format = "0.00E+00"
-                        # Apply color scheme
+                        # Apply color scheme (background only - use black text)
                         color = get_excel_color_for_value(min_val, effective_color_scheme, is_ber_metric=True)
                         apply_cell_background_color(min_cell, color)
-                        if should_use_white_font(color):
-                            min_cell.font = Font(color=Color(rgb="FFFFFFFF"))
                     else:
                         min_cell.value = "-"
 
@@ -516,11 +517,9 @@ class ExcelExporter:
                     if avg_val is not None:
                         avg_cell.value = avg_val
                         avg_cell.number_format = "0.00E+00"
-                        # Apply color scheme
+                        # Apply color scheme (background only - use black text)
                         color = get_excel_color_for_value(avg_val, effective_color_scheme, is_ber_metric=True)
                         apply_cell_background_color(avg_cell, color)
-                        if should_use_white_font(color):
-                            avg_cell.font = Font(color=Color(rgb="FFFFFFFF"))
                     else:
                         avg_cell.value = "-"
 
@@ -529,11 +528,9 @@ class ExcelExporter:
                     if max_val is not None:
                         max_cell.value = max_val
                         max_cell.number_format = "0.00E+00"
-                        # Apply color scheme
+                        # Apply color scheme (background only - use black text)
                         color = get_excel_color_for_value(max_val, effective_color_scheme, is_ber_metric=True)
                         apply_cell_background_color(max_cell, color)
-                        if should_use_white_font(color):
-                            max_cell.font = Font(color=Color(rgb="FFFFFFFF"))
                     else:
                         max_cell.value = "-"
 
@@ -541,6 +538,37 @@ class ExcelExporter:
                     rows_written += 1
 
                 row += 3  # Spacing between lanes
+
+            # Add color legend after all lane tables
+            row += 1
+            ws.cell(row, 1, "Color Legend:")
+            ws.cell(row, 1).font = Font(bold=True)
+            row += 1
+
+            # Generate legend from color scheme thresholds
+            sorted_thresholds = sorted(effective_color_scheme.thresholds)
+            for i, (threshold, color) in enumerate(sorted_thresholds):
+                threshold_text = f"<= {threshold:.2e}"
+                ws.cell(row, 1, threshold_text)
+
+                from bh_glx_data.system_analysis.excel_formatters import (
+                    apply_cell_background_color,
+                    map_terminal_color_to_excel,
+                )
+
+                color_hex = map_terminal_color_to_excel(color)
+                apply_cell_background_color(ws.cell(row, 2, ""), color_hex)
+                row += 1
+
+            # Add default color for values exceeding all thresholds
+            last_threshold_color = sorted_thresholds[-1][1]
+            if effective_color_scheme.default_color != last_threshold_color:
+                threshold_text = f"> {sorted_thresholds[-1][0]:.2e}"
+                ws.cell(row, 1, threshold_text)
+
+                color_hex = map_terminal_color_to_excel(effective_color_scheme.default_color)
+                apply_cell_background_color(ws.cell(row, 2, ""), color_hex)
+                row += 1
 
             # Add metadata summary at bottom
             from bh_glx_data.system_analysis.excel_formatters import write_metadata_section
@@ -604,7 +632,8 @@ class ExcelExporter:
             ws_name = generate_unique_worksheet_name(wb, "Database Info")
             ws = wb.create_sheet(ws_name)
 
-            # Prepare data
+            # Prepare data - store numbers as numbers, not strings
+            # Use three columns for better formatting
             data = {
                 "Property": [
                     "Database Path",
@@ -617,27 +646,44 @@ class ExcelExporter:
                 ],
                 "Value": [
                     str(self.db.db_path),
-                    f"{info.total_tests:,}",
-                    str(info.unique_hosts),
-                    ", ".join(str(s) for s in info.unique_speeds),
+                    info.total_tests,  # Store as number
+                    info.unique_hosts,  # Store as number
+                    ", ".join(str(s) for s in info.unique_speeds),  # Keep as string (comma-separated)
                     f"{info.date_range[0]} to {info.date_range[1]}" if info.date_range else "N/A",
+                    "",
+                    "",
+                ],
+                "Percentage": [
+                    "",
+                    "",
+                    "",
+                    "",
+                    "",
                     "",
                     "",
                 ],
             }
 
-            # Add status breakdown
+            # Add status breakdown with counts as numbers and percentages
             for status, count in info.status_breakdown.items():
                 percentage = (count / info.total_tests * 100) if info.total_tests > 0 else 0
                 data["Property"].append(f"  {status}")
-                data["Value"].append(f"{count:,} ({percentage:.1f}%)")
+                data["Value"].append(count)  # Store count as number
+                data["Percentage"].append(percentage / 100)  # Store as decimal for percentage formatting
 
             # Add blank row and ingestion count
             data["Property"].extend(["", "Total Ingestions"])
-            data["Value"].extend(["", str(info.total_ingestions)])
+            data["Value"].extend(["", info.total_ingestions])  # Store as number
+            data["Percentage"].extend(["", ""])
 
-            headers = ["Property", "Value"]
-            write_table_to_worksheet(ws, data, headers, title="Database Information")
+            headers = ["Property", "Value", "Percentage"]
+            column_formats = {
+                "Value": "#,##0",  # Thousands separator for numbers
+                "Percentage": "0.0%",  # Percentage format
+            }
+            write_table_to_worksheet(
+                ws, data, headers, title="Database Information", column_formats=column_formats
+            )
 
             rows_written = len(data["Property"])
 
@@ -697,14 +743,14 @@ class ExcelExporter:
                 eth_id = "-"
                 lane_str = "-"
 
-            # Extract lane number from "lane_N" or "laneN" format
+            # Extract lane number from "lane_N" or "laneN" format as integer
             if lane_str.startswith("lane_"):
-                lane_num = lane_str.split("_")[1]
+                lane_num = int(lane_str.split("_")[1])
             elif lane_str.startswith("lane"):
                 # Handle "laneN" format (no underscore)
-                lane_num = lane_str.replace("lane", "")
+                lane_num = int(lane_str.replace("lane", ""))
             else:
-                lane_num = lane_str
+                lane_num = int(lane_str) if lane_str.isdigit() else lane_str
 
             data["bus_id"].append(bus_id)
             data["eth_id"].append(eth_id)
@@ -716,5 +762,60 @@ class ExcelExporter:
             data["Max BER"].append(lane_stat.max_ber if lane_stat.max_ber is not None else "-")
             data["High BER Count"].append(lane_stat.high_ber_count)
             data["Samples"].append(lane_stat.sample_count)
+
+        return data
+
+    def _prepare_count_table_data(
+        self, counts: Union[ThresholdExceededCounts, CustomThresholdCounts, TrainingFailureCounts]
+    ) -> Dict[str, List]:
+        """Prepare count data for table format with separate columns.
+
+        Args:
+            counts: Count data
+
+        Returns:
+            Dictionary mapping column names to data lists
+        """
+        data = {
+            "bus_id": [],
+            "eth_id": [],
+            "lane": [],
+            "Count": [],
+        }
+
+        for lane_id in sorted(counts.lane_counts.keys()):
+            count = counts.lane_counts[lane_id]
+
+            # Parse lane_id: "hostname/bus_id/eth_id/lane_N" or "bus_id/eth_id/lane_N"
+            parts = lane_id.split("/")
+            if len(parts) == 4:
+                # Format: hostname/bus_id/eth_id/lane_N
+                bus_id = parts[1]
+                eth_id = parts[2]
+                lane_str = parts[3]
+            elif len(parts) == 3:
+                # Format: bus_id/eth_id/lane_N
+                bus_id = parts[0]
+                eth_id = parts[1]
+                lane_str = parts[2]
+            else:
+                # Unexpected format, use full lane_id
+                bus_id = lane_id
+                eth_id = "-"
+                lane_str = "-"
+
+            # Extract lane number from "lane_N" or "laneN" format as integer
+            if lane_str.startswith("lane_"):
+                lane_num = int(lane_str.split("_")[1])
+            elif lane_str.startswith("lane"):
+                # Handle "laneN" format (no underscore)
+                lane_num = int(lane_str.replace("lane", ""))
+            else:
+                lane_num = int(lane_str) if lane_str.isdigit() else lane_str
+
+            data["bus_id"].append(bus_id)
+            data["eth_id"].append(eth_id)
+            data["lane"].append(lane_num)
+            data["Count"].append(count)
 
         return data
