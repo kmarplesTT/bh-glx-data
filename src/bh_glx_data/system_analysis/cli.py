@@ -268,6 +268,11 @@ Lane Specifications:
         help="Filter by train speed",
     )
     advanced_stats_parser.add_argument(
+        "--color-scheme",
+        type=str,
+        help="Color scheme name for Excel export (default, sensitive, tolerant)",
+    )
+    advanced_stats_parser.add_argument(
         "--excel-output",
         type=Path,
         metavar="FILE",
@@ -647,10 +652,12 @@ def handle_advanced_stats(db: DatabaseManager, args: argparse.Namespace) -> int:
         # Excel export (if requested)
         if args.excel_output:
             exporter = ExcelExporter(db)
+            color_scheme = _get_color_scheme(args.color_scheme, BER_COLOR_SCHEMES)
             export_result = exporter.export_advanced_stats(
                 result,
                 args.excel_output,
                 lane_spec=args.lane_spec,
+                color_scheme=color_scheme,
             )
             logger.info(f"\nExported to: {export_result.output_path}")
             logger.info(f"Worksheet: {export_result.worksheet_name}")

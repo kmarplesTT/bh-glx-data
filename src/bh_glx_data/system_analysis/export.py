@@ -358,6 +358,7 @@ class ExcelExporter:
         stats: Union[AggregatedHostStats, List[AggregatedHostStats]],
         output_path: Path,
         lane_spec: str,
+        color_scheme: Optional[ColorScheme] = None,
     ) -> ExcelExportResult:
         """Export advanced statistics (two tables per lane).
 
@@ -365,6 +366,7 @@ class ExcelExporter:
             stats: AggregatedHostStats or list of stats
             output_path: Path to Excel file
             lane_spec: Lane specification string for worksheet name
+            color_scheme: Optional color scheme for BER value cells
 
         Returns:
             ExcelExportResult with export details
@@ -387,10 +389,19 @@ class ExcelExporter:
             # Normalize to list
             stats_list = [stats] if isinstance(stats, AggregatedHostStats) else stats
 
+            # Use provided color scheme or default BER color scheme
+            effective_color_scheme = color_scheme or BER_COLOR_SCHEMES["default"]
+
             row = 1
             rows_written = 0
 
-            from openpyxl.styles import Font, PatternFill
+            from openpyxl.styles import Color, Font, PatternFill
+
+            from bh_glx_data.system_analysis.excel_formatters import (
+                apply_cell_background_color,
+                get_excel_color_for_value,
+                should_use_white_font,
+            )
 
             for agg_stats in stats_list:
                 # Title for this lane
@@ -423,6 +434,11 @@ class ExcelExporter:
                     if host_stat.min_ber is not None:
                         min_cell.value = host_stat.min_ber
                         min_cell.number_format = "0.00E+00"
+                        # Apply color scheme
+                        color = get_excel_color_for_value(host_stat.min_ber, effective_color_scheme, is_ber_metric=True)
+                        apply_cell_background_color(min_cell, color)
+                        if should_use_white_font(color):
+                            min_cell.font = Font(color=Color(rgb="FFFFFFFF"))
                     else:
                         min_cell.value = "-"
 
@@ -431,6 +447,11 @@ class ExcelExporter:
                     if host_stat.avg_ber is not None:
                         avg_cell.value = host_stat.avg_ber
                         avg_cell.number_format = "0.00E+00"
+                        # Apply color scheme
+                        color = get_excel_color_for_value(host_stat.avg_ber, effective_color_scheme, is_ber_metric=True)
+                        apply_cell_background_color(avg_cell, color)
+                        if should_use_white_font(color):
+                            avg_cell.font = Font(color=Color(rgb="FFFFFFFF"))
                     else:
                         avg_cell.value = "-"
 
@@ -439,6 +460,11 @@ class ExcelExporter:
                     if host_stat.max_ber is not None:
                         max_cell.value = host_stat.max_ber
                         max_cell.number_format = "0.00E+00"
+                        # Apply color scheme
+                        color = get_excel_color_for_value(host_stat.max_ber, effective_color_scheme, is_ber_metric=True)
+                        apply_cell_background_color(max_cell, color)
+                        if should_use_white_font(color):
+                            max_cell.font = Font(color=Color(rgb="FFFFFFFF"))
                     else:
                         max_cell.value = "-"
 
@@ -477,6 +503,11 @@ class ExcelExporter:
                     if min_val is not None:
                         min_cell.value = min_val
                         min_cell.number_format = "0.00E+00"
+                        # Apply color scheme
+                        color = get_excel_color_for_value(min_val, effective_color_scheme, is_ber_metric=True)
+                        apply_cell_background_color(min_cell, color)
+                        if should_use_white_font(color):
+                            min_cell.font = Font(color=Color(rgb="FFFFFFFF"))
                     else:
                         min_cell.value = "-"
 
@@ -485,6 +516,11 @@ class ExcelExporter:
                     if avg_val is not None:
                         avg_cell.value = avg_val
                         avg_cell.number_format = "0.00E+00"
+                        # Apply color scheme
+                        color = get_excel_color_for_value(avg_val, effective_color_scheme, is_ber_metric=True)
+                        apply_cell_background_color(avg_cell, color)
+                        if should_use_white_font(color):
+                            avg_cell.font = Font(color=Color(rgb="FFFFFFFF"))
                     else:
                         avg_cell.value = "-"
 
@@ -493,6 +529,11 @@ class ExcelExporter:
                     if max_val is not None:
                         max_cell.value = max_val
                         max_cell.number_format = "0.00E+00"
+                        # Apply color scheme
+                        color = get_excel_color_for_value(max_val, effective_color_scheme, is_ber_metric=True)
+                        apply_cell_background_color(max_cell, color)
+                        if should_use_white_font(color):
+                            max_cell.font = Font(color=Color(rgb="FFFFFFFF"))
                     else:
                         max_cell.value = "-"
 
