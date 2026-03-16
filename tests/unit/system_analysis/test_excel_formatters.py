@@ -192,12 +192,14 @@ class TestMetadataSection:
         assert ws.cell(1, 1).value == "Summary"
         assert ws.cell(1, 1).font.bold is True
 
-        # Check metadata values
+        # Check metadata values (now stored as numbers, not formatted strings)
         assert ws.cell(2, 1).value == "Total Samples:"
-        assert ws.cell(2, 2).value == "1,000"
+        assert ws.cell(2, 2).value == 1000
+        assert ws.cell(2, 2).number_format == "#,##0"
 
         assert ws.cell(3, 1).value == "Unique Systems:"
-        assert ws.cell(3, 2).value == "5"
+        assert ws.cell(3, 2).value == 5
+        assert ws.cell(3, 2).number_format == "#,##0"
 
         assert ws.cell(4, 1).value == "Train Speeds:"
         assert ws.cell(4, 2).value == "200, 400"
@@ -273,17 +275,21 @@ class TestHeatmapWriting:
 
         write_heatmap_to_worksheet(ws, lane_data, color_scheme, is_ber_metric=True)
 
-        # Check header
-        assert ws.cell(1, 1).value == "Port"
-        assert ws.cell(1, 2).value == "Lane 0"
-        assert ws.cell(1, 3).value == "Lane 1"
+        # Check header (now split into bus_id and eth_id)
+        assert ws.cell(1, 1).value == "bus_id"
+        assert ws.cell(1, 2).value == "eth_id"
+        assert ws.cell(1, 3).value == "Lane 0"
+        assert ws.cell(1, 4).value == "Lane 1"
 
-        # Check port identifiers
-        assert ws.cell(2, 1).value == "01:00.0/ETH07"
-        assert ws.cell(3, 1).value == "01:00.0/ETH08"
+        # Check port identifiers (now in separate columns)
+        assert ws.cell(2, 1).value == "01:00.0"  # bus_id
+        assert ws.cell(2, 2).value == "ETH07"    # eth_id
+        assert ws.cell(3, 1).value == "01:00.0"  # bus_id
+        assert ws.cell(3, 2).value == "ETH08"    # eth_id
 
-        # Check lane values (formatted as scientific notation)
-        assert "1.23e-12" in str(ws.cell(2, 2).value)
+        # Check lane values (now stored as float with scientific notation format)
+        assert ws.cell(2, 3).value == 1.23e-12
+        assert ws.cell(2, 3).number_format == "0.00E+00"
 
     def test_write_heatmap_with_colors(self):
         """Test that heatmap applies background colors."""

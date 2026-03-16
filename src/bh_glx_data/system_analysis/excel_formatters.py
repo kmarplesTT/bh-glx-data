@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 from openpyxl import Workbook, load_workbook
 from openpyxl.chart import BarChart, Reference
 from openpyxl.chart.series import DataPoint
-from openpyxl.styles import Alignment, Font, PatternFill
+from openpyxl.styles import Alignment, Color, Font, PatternFill
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.worksheet import Worksheet
 
@@ -136,6 +136,31 @@ def map_terminal_color_to_excel(terminal_color: str) -> str:
     return TERMINAL_TO_EXCEL_COLOR_MAP.get(terminal_color, "FFFFFFFF")  # Default to white
 
 
+def should_use_white_font(hex_color: str) -> bool:
+    """Determine if white font should be used on a given background color.
+
+    Args:
+        hex_color: Excel hex color with alpha channel (e.g., "FF006400")
+
+    Returns:
+        True if white font should be used, False otherwise
+    """
+    # Remove alpha channel if present
+    if len(hex_color) == 8:
+        hex_color = hex_color[2:]
+
+    # Convert hex to RGB
+    r = int(hex_color[0:2], 16)
+    g = int(hex_color[2:4], 16)
+    b = int(hex_color[4:6], 16)
+
+    # Calculate relative luminance using the formula from WCAG
+    # If luminance is low (dark color), use white font
+    luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255
+
+    return luminance < 0.5  # Use white font for dark backgrounds
+
+
 def get_excel_color_for_value(
     value: Union[float, int, None], color_scheme: ColorScheme, is_ber_metric: bool
 ) -> str:
@@ -195,15 +220,23 @@ def write_metadata_section(ws: Worksheet, start_row: int, metadata: Dict[str, An
         ws.cell(row, 1, f"{key}:")
         ws.cell(row, 1).font = Font(bold=True)
 
-        # Format value
+        # Write value with appropriate type and formatting
+        value_cell = ws.cell(row, 2)
         if isinstance(value, (list, tuple)):
-            formatted_value = ", ".join(str(v) for v in value)
-        elif isinstance(value, (int, float)):
-            formatted_value = f"{value:,}" if isinstance(value, int) else f"{value:.2e}"
+            # Lists/tuples as comma-separated strings
+            value_cell.value = ", ".join(str(v) for v in value)
+        elif isinstance(value, int):
+            # Integers as numbers with thousands separator
+            value_cell.value = value
+            value_cell.number_format = "#,##0"
+        elif isinstance(value, float):
+            # Floats as numbers with scientific notation
+            value_cell.value = value
+            value_cell.number_format = "0.00E+00"
         else:
-            formatted_value = str(value)
+            # Everything else as string
+            value_cell.value = str(value)
 
-        ws.cell(row, 2, formatted_value)
         row += 1
 
     return row + 1  # Add spacing
@@ -309,8 +342,12 @@ def write_heatmap_to_worksheet(
             logger.warning(f"Unexpected lane_id format: {lane_id}")
             continue
 
-        # Extract lane number
-        lane_num = int(lane_str.split("_")[1])
+        # Extract lane number from "lane_N" or "laneN" format
+        if "_" in lane_str:
+            lane_num = int(lane_str.split("_")[1])
+        else:
+            # Handle "laneN" format (no underscore)
+            lane_num = int(lane_str.replace("lane", ""))
 
         key = (bus_id, eth_id)
         if key not in grouped_data:
@@ -318,13 +355,17 @@ def write_heatmap_to_worksheet(
         grouped_data[key][lane_num] = value
 
     # Write heatmap table
-    # Header row: Lane 0, Lane 1, ..., Lane 7
-    ws.cell(row, 1, "Port")
+    # Header row: bus_id, eth_id, Lane 0, Lane 1, ..., Lane 7
+    ws.cell(row, 1, "bus_id")
     ws.cell(row, 1).font = Font(bold=True)
     ws.cell(row, 1).fill = PatternFill(start_color="CCCCCC", end_color="CCCCCC", fill_type="solid")
 
+    ws.cell(row, 2, "eth_id")
+    ws.cell(row, 2).font = Font(bold=True)
+    ws.cell(row, 2).fill = PatternFill(start_color="CCCCCC", end_color="CCCCCC", fill_type="solid")
+
     for lane_num in range(8):
-        cell = ws.cell(row, lane_num + 2, f"Lane {lane_num}")
+        cell = ws.cell(row, lane_num + 3, f"Lane {lane_num}")
         cell.font = Font(bold=True)
         cell.fill = PatternFill(start_color="CCCCCC", end_color="CCCCCC", fill_type="solid")
         cell.alignment = Alignment(horizontal="center")
@@ -332,15 +373,16 @@ def write_heatmap_to_worksheet(
 
     # Data rows
     for (bus_id, eth_id), lanes in sorted(grouped_data.items()):
-        # Port identifier
-        port_id = f"{bus_id}/{eth_id}"
-        ws.cell(row, 1, port_id)
+        # Port identifiers in separate columns
+        ws.cell(row, 1, bus_id)
         ws.cell(row, 1).font = Font(bold=True)
+        ws.cell(row, 2, eth_id)
+        ws.cell(row, 2).font = Font(bold=True)
 
         # Lane values with colors
         for lane_num in range(8):
             value = lanes.get(lane_num)
-            cell = ws.cell(row, lane_num + 2)
+            cell = ws.cell(row, lane_num + 3)  # +3 because of bus_id and eth_id columns
 
             if value is not None:
                 # Store numeric value
@@ -353,6 +395,11 @@ def write_heatmap_to_worksheet(
                 # Apply color
                 color = get_excel_color_for_value(value, color_scheme, is_ber_metric)
                 apply_cell_background_color(cell, color)
+
+                # Use white font on dark backgrounds for readability
+                if should_use_white_font(color):
+                    cell.font = Font(color=Color(rgb="FFFFFFFF"))  # White font
+
                 cell.alignment = Alignment(horizontal="center")
             else:
                 cell.value = "-"
@@ -361,8 +408,9 @@ def write_heatmap_to_worksheet(
         row += 1
 
     # Adjust column widths
-    ws.column_dimensions["A"].width = 20
-    for col_idx in range(2, 10):
+    ws.column_dimensions["A"].width = 12  # bus_id
+    ws.column_dimensions["B"].width = 12  # eth_id
+    for col_idx in range(3, 11):  # Lane 0 through Lane 7
         letter = get_column_letter(col_idx)
         ws.column_dimensions[letter].width = 12
 
@@ -386,14 +434,17 @@ def write_heatmap_to_worksheet(
         row += 1
 
     # Add default color for values exceeding all thresholds
-    if is_ber_metric:
-        threshold_text = f"> {sorted_thresholds[-1][0]:.2e}"
-    else:
-        threshold_text = f"> {int(sorted_thresholds[-1][0])}"
-    ws.cell(row, 1, threshold_text)
-    color_hex = map_terminal_color_to_excel(color_scheme.default_color)
-    apply_cell_background_color(ws.cell(row, 2, ""), color_hex)
-    row += 1
+    # Only show if default color is different from last threshold color
+    last_threshold_color = sorted_thresholds[-1][1]
+    if color_scheme.default_color != last_threshold_color:
+        if is_ber_metric:
+            threshold_text = f"> {sorted_thresholds[-1][0]:.2e}"
+        else:
+            threshold_text = f"> {int(sorted_thresholds[-1][0])}"
+        ws.cell(row, 1, threshold_text)
+        color_hex = map_terminal_color_to_excel(color_scheme.default_color)
+        apply_cell_background_color(ws.cell(row, 2, ""), color_hex)
+        row += 1
 
     # Write metadata section if provided
     if metadata:

@@ -198,8 +198,14 @@ class TestExportBERStatistics:
         assert "Stats - all" in wb.sheetnames
 
         ws = wb["Stats - all"]
-        assert ws.cell(3, 1).value == "Lane"  # Header row (after title and spacing)
-        assert "01:00.0/ETH07/lane_0" in str(ws.cell(4, 1).value)  # Data row
+        # Header row (after title and spacing)
+        assert ws.cell(3, 1).value == "bus_id"
+        assert ws.cell(3, 2).value == "eth_id"
+        assert ws.cell(3, 3).value == "lane"
+        # Data row
+        assert ws.cell(4, 1).value == "01:00.0"  # bus_id
+        assert ws.cell(4, 2).value == "ETH07"  # eth_id
+        assert ws.cell(4, 3).value == "0"  # lane number
 
     def test_export_heatmap_format(self, exporter, sample_ber_statistics, tmp_path):
         """Test exporting BER statistics in heatmap format."""

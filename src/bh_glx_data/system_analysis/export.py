@@ -26,7 +26,11 @@ from bh_glx_data.system_analysis.query_engine import (
     ThresholdExceededCounts,
     TrainingFailureCounts,
 )
-from bh_glx_data.system_analysis.visualization import ColorScheme
+from bh_glx_data.system_analysis.visualization import (
+    BER_COLOR_SCHEMES,
+    ColorScheme,
+    COUNT_COLOR_SCHEMES,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -131,7 +135,7 @@ class ExcelExporter:
             if format == "table":
                 # Prepare table data
                 data = self._prepare_ber_statistics_table_data(stats)
-                headers = ["Lane", "Min BER", "Avg BER", "Max BER", "High BER Count", "Samples"]
+                headers = ["bus_id", "eth_id", "lane", "Min BER", "Avg BER", "Max BER", "High BER Count", "Samples"]
 
                 # Define number formats for BER columns (scientific notation with 2 decimal places)
                 column_formats = {
@@ -148,7 +152,7 @@ class ExcelExporter:
                     metadata=metadata,
                     column_formats=column_formats,
                 )
-                rows_written = len(data["Lane"])
+                rows_written = len(data["bus_id"])
 
             else:  # heatmap
                 # For heatmap, we need a specific statistic (max, avg, min, high_ber, variance)
@@ -161,7 +165,7 @@ class ExcelExporter:
                 write_heatmap_to_worksheet(
                     ws,
                     lane_data,
-                    color_scheme or ColorScheme(),  # Use default if none provided
+                    color_scheme or BER_COLOR_SCHEMES["default"],  # Use default if none provided
                     is_ber_metric=True,
                     title=f"BER Statistics Heatmap - {lane_spec}",
                     metadata=metadata,
@@ -255,7 +259,7 @@ class ExcelExporter:
                 write_heatmap_to_worksheet(
                     ws,
                     counts.lane_counts,
-                    color_scheme or ColorScheme(),
+                    color_scheme or COUNT_COLOR_SCHEMES["default"],
                     is_ber_metric=False,
                     title=f"{cmd_type} Counts Heatmap - {lane_spec}",
                     metadata=metadata,
@@ -621,7 +625,9 @@ class ExcelExporter:
             Dictionary mapping column names to data lists
         """
         data = {
-            "Lane": [],
+            "bus_id": [],
+            "eth_id": [],
+            "lane": [],
             "Min BER": [],
             "Avg BER": [],
             "Max BER": [],
@@ -631,7 +637,38 @@ class ExcelExporter:
 
         for lane_id in sorted(stats.lane_stats.keys()):
             lane_stat = stats.lane_stats[lane_id]
-            data["Lane"].append(lane_id)
+
+            # Parse lane_id: "hostname/bus_id/eth_id/lane_N" or "bus_id/eth_id/lane_N"
+            parts = lane_id.split("/")
+            if len(parts) == 4:
+                # Format: hostname/bus_id/eth_id/lane_N
+                bus_id = parts[1]
+                eth_id = parts[2]
+                lane_str = parts[3]
+            elif len(parts) == 3:
+                # Format: bus_id/eth_id/lane_N
+                bus_id = parts[0]
+                eth_id = parts[1]
+                lane_str = parts[2]
+            else:
+                # Unexpected format, use full lane_id
+                bus_id = lane_id
+                eth_id = "-"
+                lane_str = "-"
+
+            # Extract lane number from "lane_N" or "laneN" format
+            if lane_str.startswith("lane_"):
+                lane_num = lane_str.split("_")[1]
+            elif lane_str.startswith("lane"):
+                # Handle "laneN" format (no underscore)
+                lane_num = lane_str.replace("lane", "")
+            else:
+                lane_num = lane_str
+
+            data["bus_id"].append(bus_id)
+            data["eth_id"].append(eth_id)
+            data["lane"].append(lane_num)
+
             # Store numeric values (or "-" for None) - formatting will be applied by write_table_to_worksheet
             data["Min BER"].append(lane_stat.min_ber if lane_stat.min_ber is not None else "-")
             data["Avg BER"].append(lane_stat.avg_ber if lane_stat.avg_ber is not None else "-")
