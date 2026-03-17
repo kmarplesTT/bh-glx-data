@@ -317,8 +317,9 @@ class ExcelExporter:
             # Create or open workbook
             wb, file_existed = create_or_open_workbook(output_path)
 
-            # Generate worksheet name: "Histogram - chart"
-            base_name = "Histogram - chart"
+            # Generate worksheet name: "Hist - <lane_spec>"
+            base_name = f"Hist - {lane_spec}"
+            base_name = sanitize_worksheet_name(base_name)
             ws_name = generate_unique_worksheet_name(wb, base_name)
             ws = wb.create_sheet(ws_name)
 
@@ -391,8 +392,9 @@ class ExcelExporter:
             # Create or open workbook
             wb, file_existed = create_or_open_workbook(output_path)
 
-            # Generate worksheet name: "Advanced Stats - table"
-            base_name = "Advanced Stats - table"
+            # Generate worksheet name: "Adv Stats - <lane_spec>"
+            base_name = f"Adv Stats - {lane_spec}"
+            base_name = sanitize_worksheet_name(base_name)
             ws_name = generate_unique_worksheet_name(wb, base_name)
             ws = wb.create_sheet(ws_name)
 
