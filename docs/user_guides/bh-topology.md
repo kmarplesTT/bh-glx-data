@@ -2,8 +2,8 @@
 
 A command-line tool for querying BH Galaxy platform topology. This tool provides information about Ethernet port connectivity between chips, QSFP port mappings for external cables, and complete device-to-device signal paths through cable configurations.
 
-**Version:** 0.3.0
-**Purpose:** Query platform connectivity, QSFP port mappings, and cable paths for hardware debugging and failure analysis
+**Version:** 0.4.0
+**Purpose:** Query platform connectivity, QSFP port mappings, sibling ports sharing cable connectors, and cable paths for hardware debugging and failure analysis
 
 ---
 
@@ -18,13 +18,16 @@ bh-topology 01:00.0 ETH07
 # 2. Query QSFP port for cable connector
 bh-topology 01:00.0 ETH10
 
-# 3. Query full cable path with configuration
+# 3. Find sibling port sharing same QSFP connector
+bh-topology 01:00.0 ETH10 --sibling
+
+# 4. Query full cable path with configuration
 bh-topology 01:00.0 ETH10 qc3
 
-# 4. Show all connections for a device
+# 5. Show all connections for a device
 bh-topology 01:00.0 --all
 
-# 5. Get JSON output for scripting
+# 6. Get JSON output for scripting
 bh-topology 01:00.0 ETH07 --json
 ```
 
@@ -86,9 +89,17 @@ Ports fall into different categories:
 
 Each UBB has 14 QSFP ports (QSFP-1 through QSFP-14):
 - Each QSFP port carries 8 serdes lanes
-- Maps to 2 ETH ports (4 lanes each)
+- Maps to 2 ETH ports (4 lanes each) - these are "siblings"
 - Cable connector ETH ports map to specific QSFP ports
 - Mapping varies by chip position (U1-U8)
+- Sibling ports share the same physical cable connector
+
+**Sibling Ports:**
+Two ETH ports that share the same QSFP connector are called siblings. For example:
+- QSFP-7 connects to U1 ETH10 and U2 ETH10 (siblings on different chips)
+- QSFP-1 connects to U5 ETH02 and U5 ETH03 (siblings on same chip)
+
+Use the `--sibling` flag to find which port shares a QSFP connector.
 
 ### Cable Configuration
 
@@ -132,6 +143,7 @@ bh-topology <bus_id> --all [OPTIONS]
 - `--all` - Show all connections for the device
 - `--json` - Output in JSON format for scripting
 - `--bidirectional` - Show reverse connection as well
+- `--sibling` - Show the other port that shares the same QSFP cable connector
 
 **Logging:**
 
@@ -182,7 +194,87 @@ UBB1/U1 (01:00.0) ETH10 -> UBB1 QSFP-7
 - QSFP-7 is the external cable connector
 - Need cable configuration to trace further
 
-### Example 3: Query Complete Cable Path
+### Example 3: Find Sibling Port (Different Chips)
+
+Find the other port sharing the same QSFP connector:
+
+```bash
+bh-topology 01:00.0 ETH10 --sibling
+```
+
+**Output:**
+```
+UBB1/U1 (01:00.0) ETH10 -> UBB1 QSFP-7
+Sibling (shares QSFP-7): UBB1/U2 (02:00.0) ETH10
+```
+
+**What this means:**
+- Source port: 01:00.0 ETH10 (U1 chip)
+- Both ports connect to QSFP-7
+- Sibling port: 02:00.0 ETH10 (U2 chip)
+- These two ETH ports share the same physical cable connector
+- Each uses 4 lanes of the 8-lane QSFP connector
+
+**Why this is useful:**
+- If one port fails, check if sibling also fails
+- Both failing suggests cable/connector issue
+- One failing suggests port-specific issue
+
+### Example 4: Find Sibling Port (Same Chip)
+
+Some QSFP connectors have both ports on the same chip:
+
+```bash
+bh-topology 05:00.0 ETH02 --sibling
+```
+
+**Output:**
+```
+UBB1/U5 (05:00.0) ETH02 -> UBB1 QSFP-1
+Sibling (shares QSFP-1): UBB1/U5 (05:00.0) ETH03
+```
+
+**What this means:**
+- Both ETH02 and ETH03 on same chip (05:00.0)
+- Share the same QSFP-1 connector
+- Use different 4-lane sections of the 8-lane QSFP
+
+### Example 5: Sibling with JSON Output
+
+Get sibling information in JSON format:
+
+```bash
+bh-topology 03:00.0 ETH11 --sibling --json
+```
+
+**Output:**
+```json
+{
+  "source": {
+    "bus_id": "03:00.0",
+    "eth_port": "ETH11",
+    "device": "UBB1/U3"
+  },
+  "destination": {
+    "qsfp_port": 13,
+    "ubb": 1,
+    "description": "UBB1 QSFP-13"
+  },
+  "sibling": {
+    "bus_id": "04:00.0",
+    "eth_port": "ETH11",
+    "device": "UBB1/U4",
+    "qsfp_port": 13
+  }
+}
+```
+
+**Use cases:**
+- Scripting failure correlation
+- Automated topology analysis
+- Database import for relationship tracking
+
+### Example 6: Query Complete Cable Path
 
 Trace complete path through cable configuration:
 
@@ -203,7 +295,7 @@ bh-topology 01:00.0 ETH10 qc3
 
 This is the complete signal path from device to device.
 
-### Example 4: Show All Connections for Device
+### Example 7: Show All Connections for Device
 
 Display all port connections for a chip:
 
@@ -236,7 +328,7 @@ Unconnected Ports:
   ETH12, ETH13
 ```
 
-### Example 5: JSON Output for Scripting
+### Example 8: JSON Output for Scripting
 
 Get machine-readable output:
 
@@ -295,7 +387,7 @@ bh-topology 01:00.0 ETH10 qc3 --json
 }
 ```
 
-### Example 6: Bidirectional Lookup
+### Example 9: Bidirectional Lookup
 
 Check both forward and reverse connections:
 
@@ -309,7 +401,7 @@ Forward: 01:00.0 ETH07 -> 05:00.0 ETH00
 Reverse: 05:00.0 ETH00 -> 01:00.0 ETH07
 ```
 
-### Example 7: Flexible Input Formats
+### Example 10: Flexible Input Formats
 
 The tool accepts various input formats:
 
@@ -573,6 +665,88 @@ bh-topology 01:00.0 ETH10
 # - Mixed? Signal integrity or systematic issue
 ```
 
+### Workflow 7: Sibling Port Failure Analysis
+
+Use sibling ports to diagnose cable/connector vs port-specific issues:
+
+```bash
+# Scenario: Failure on 01:00.0 ETH10
+
+# 1. Find sibling port
+bh-topology 01:00.0 ETH10 --sibling
+
+# Output: Sibling (shares QSFP-7): UBB1/U2 (02:00.0) ETH10
+
+# 2. Check if sibling also failed
+# Look in test data for 02:00.0 ETH10
+
+# 3. Interpret results:
+
+# BOTH ports fail:
+# - Physical cable/connector issue (QSFP-7)
+# - Cable damage or poor connection
+# - Connector contamination
+# - Action: Check/replace cable on QSFP-7
+
+# ONLY original port fails:
+# - Port-specific issue (01:00.0 ETH10)
+# - Transmit/receive circuitry problem
+# - Pin damage on chip
+# - Action: Investigate chip 01:00.0
+
+# Example automated check:
+failed_port="01:00.0,ETH10"
+sibling=$(bh-topology 01:00.0 ETH10 --sibling --json | jq -r '.sibling.bus_id + "," + .sibling.eth_port')
+
+if grep -q "$sibling" failures.csv; then
+    echo "CABLE/CONNECTOR ISSUE: Both siblings failed on same QSFP"
+else
+    echo "PORT-SPECIFIC ISSUE: Only one sibling failed"
+fi
+```
+
+**Common Patterns:**
+
+1. **Both siblings fail consistently**
+   - Cable connector problem
+   - Check all QSFP ports on the UBB
+   - May indicate systematic connector issue
+
+2. **Siblings alternate failures**
+   - Intermittent cable connection
+   - Poor cable seating
+   - Try reseating cable
+
+3. **One sibling always fails**
+   - Bad port on chip
+   - Pin damage or trace issue
+   - RMA candidate if persistent
+
+### Workflow 8: QSFP Connector Mapping
+
+Map all sibling relationships for a UBB:
+
+```bash
+#!/bin/bash
+# map_qsfp_siblings.sh - Map all QSFP sibling pairs
+
+echo "QSFP Sibling Mapping for UBB1:"
+echo "=============================="
+
+# Check common cable connector ports (ETH10, ETH11)
+for chip in 01 02 03 04 05 06 07 08; do
+    for port in ETH10 ETH11; do
+        result=$(bh-topology ${chip}:00.0 $port --sibling 2>/dev/null)
+        if echo "$result" | grep -q "Sibling"; then
+            echo "$result"
+        fi
+    done
+done
+
+# Output shows all QSFP sibling relationships
+# Useful for understanding physical connector layout
+```
+
 ---
 
 ## Troubleshooting
@@ -749,6 +923,31 @@ Quick reference for bus ID to UBB/Chip mapping:
 3. **All cable ports fail** - Cable or connector problem
 4. **All ports to one chip fail** - Destination chip issue
 5. **Random distribution** - Systematic or environmental issue
+6. **Both siblings fail** - QSFP cable/connector problem (use `--sibling` to check)
+7. **One sibling fails** - Port-specific issue on one chip
+
+### Using Sibling Ports
+
+**When to check siblings:**
+- Any failure on cable connector ports (ETH10, ETH11, etc.)
+- Debugging QSFP connector issues
+- Distinguishing cable vs port problems
+- Validating connector integrity
+
+**Sibling failure matrix:**
+
+| Original Port | Sibling Port | Diagnosis |
+|---------------|-------------|-----------|
+| FAIL | FAIL | Cable/connector issue |
+| FAIL | PASS | Port-specific issue |
+| PASS | FAIL | Sibling port issue |
+| PASS | PASS | No issue |
+
+**Quick check command:**
+```bash
+# Check a port and its sibling in one command
+bh-topology 01:00.0 ETH10 --sibling --json | jq '{port: .source, sibling: .sibling}'
+```
 
 ### JSON Output
 
@@ -874,6 +1073,15 @@ A: The port is likely unused or unconnected. Use `--all` to see all port categor
 **Q: How do I create a cable configuration?**
 A: See "Cable Configuration" section for format and examples.
 
+**Q: What are sibling ports?**
+A: Sibling ports are two ETH ports that share the same QSFP cable connector. Each QSFP has 8 lanes (2 ports × 4 lanes). Use `--sibling` to find them.
+
+**Q: When should I check sibling ports?**
+A: Check siblings when debugging cable connector failures. If both siblings fail, it's likely a cable/connector issue. If only one fails, it's port-specific.
+
+**Q: Do all ports have siblings?**
+A: Only cable connector ports have siblings (typically ETH10, ETH11). Platform-connected ports don't share QSFP connectors.
+
 ### Additional Resources
 
 - Main README: [README.md](../../README.md)
@@ -884,5 +1092,5 @@ A: See "Cable Configuration" section for format and examples.
 
 ---
 
-**Last Updated:** 2026-03-12
-**Tool Version:** 0.3.0
+**Last Updated:** 2026-03-17
+**Tool Version:** 0.4.0

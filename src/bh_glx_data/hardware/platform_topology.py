@@ -438,6 +438,55 @@ def get_eth_ports_for_qsfp(ubb_num: int, qsfp_port: int) -> Set[Tuple[str, str]]
     return _REVERSE_QSFP_CACHE.get((ubb_num, qsfp_port), set())
 
 
+def get_qsfp_sibling_port(bus_id: str, eth_port: str) -> Optional[Connection]:
+    """Get the other ETH port that shares the same QSFP cable connector.
+
+    Each QSFP port has 8 serdes lanes, which corresponds to 2 ETH ports (4 lanes each).
+    This function returns the sibling port that shares the same physical QSFP connector.
+
+    Args:
+        bus_id: Device bus ID (e.g., "01:00.0")
+        eth_port: ETH port in normalized format (e.g., "ETH10")
+
+    Returns:
+        Tuple of (bus_id, eth_port) for the sibling port, or None if:
+        - Port is not a cable connector
+        - No sibling port exists (shouldn't happen for valid cable connectors)
+
+    Example:
+        >>> get_qsfp_sibling_port("01:00.0", "ETH10")
+        ("02:00.0", "ETH10")  # Both share QSFP-7
+    """
+    # 1. Check if this is a cable connector port
+    if get_port_status(bus_id, eth_port) != "cable_connector":
+        return None
+
+    # 2. Get the QSFP port number
+    qsfp_port = get_qsfp_port(bus_id, eth_port)
+    if qsfp_port is None:
+        return None
+
+    # 3. Get UBB number
+    ubb_num = get_ubb_from_bus_id(bus_id)
+
+    # 4. Get all ports on this QSFP
+    all_ports = get_eth_ports_for_qsfp(ubb_num, qsfp_port)
+
+    # 5. Filter out the input port to get the sibling
+    siblings = {
+        (bid, port) for bid, port in all_ports
+        if not (bid == bus_id and port == eth_port)
+    }
+
+    # 6. Should have exactly 1 sibling (2 ports per QSFP, minus the input)
+    if len(siblings) == 1:
+        return next(iter(siblings))
+
+    # If we have 0 siblings, the port might be the only one on this QSFP (unusual)
+    # If we have >1 siblings, there's an issue with the mapping data
+    return None
+
+
 def _get_bus_id_from_ubb_chip(ubb_num: int, chip_num: int) -> str:
     """Build bus_id from UBB number and chip number.
 

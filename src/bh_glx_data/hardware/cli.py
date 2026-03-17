@@ -5,6 +5,7 @@ import json
 import logging
 import sys
 from pathlib import Path
+from typing import Optional
 
 from bh_glx_data.hardware.cable_config import CableConfigManager
 from bh_glx_data.hardware.platform_topology import (
@@ -18,6 +19,7 @@ from bh_glx_data.hardware.platform_topology import (
     get_eth_ports_for_qsfp,
     get_port_status,
     get_qsfp_port,
+    get_qsfp_sibling_port,
     get_ubb_from_bus_id,
     normalize_bus_id,
     normalize_eth_port,
@@ -59,6 +61,9 @@ Examples:
   # Bidirectional lookup
   %(prog)s 05:00.0 ETH00 --bidirectional
 
+  # Find sibling port sharing same QSFP connector
+  %(prog)s 01:00.0 ETH10 --sibling
+
 ETH Port Categories:
   Each chip has 14 ports (ETH00-ETH13). Port purposes vary by chip position:
   - ETH05, ETH08: Unused (not physically present) on all chips
@@ -90,6 +95,12 @@ ETH Port Categories:
         "-b",
         action="store_true",
         help="Also show reverse connection (what connects to the result)",
+    )
+    parser.add_argument(
+        "--sibling",
+        "-s",
+        action="store_true",
+        help="Show the other port that shares the same QSFP cable connector",
     )
     parser.add_argument("--verbose", "-v", action="store_true", help="Enable verbose logging")
 
@@ -189,15 +200,28 @@ def main():
                 # Check if this port has a QSFP mapping
                 qsfp_port = get_qsfp_port(bus_id, eth_port)
                 if qsfp_port:
+                    # Get sibling info if requested
+                    sibling_info = None
+                    if args.sibling:
+                        sibling = get_qsfp_sibling_port(bus_id, eth_port)
+                        if sibling:
+                            sibling_bus, sibling_port = sibling
+                            sibling_info = {
+                                "bus_id": sibling_bus,
+                                "eth_port": sibling_port,
+                                "device": format_device_info(sibling_bus),
+                                "qsfp_port": qsfp_port,
+                            }
+
                     # Try cable path resolution if config loaded
                     if cable_config and cable_config.is_loaded():
                         path_info = get_cable_path(bus_id, eth_port, cable_config)
                         if path_info:
-                            _output_cable_path(path_info, args.json, args.bidirectional)
+                            _output_cable_path(path_info, args.json, args.bidirectional, sibling_info)
                             sys.exit(0)
 
                     # Fall back to QSFP-only output
-                    _output_qsfp_port(bus_id, eth_port, qsfp_port, args.json)
+                    _output_qsfp_port(bus_id, eth_port, qsfp_port, args.json, sibling_info)
                     sys.exit(0)
                 else:
                     # Cable connector but no QSFP mapping (shouldn't happen)
@@ -219,6 +243,20 @@ def main():
                 sys.exit(1)
 
         dest_bus, dest_port = connected
+
+        # Handle --sibling flag
+        sibling_info = None
+        if args.sibling:
+            sibling = get_qsfp_sibling_port(bus_id, eth_port)
+            if sibling:
+                sibling_bus, sibling_port = sibling
+                qsfp_port = get_qsfp_port(bus_id, eth_port)
+                sibling_info = {
+                    "bus_id": sibling_bus,
+                    "eth_port": sibling_port,
+                    "device": format_device_info(sibling_bus),
+                    "qsfp_port": qsfp_port,
+                }
 
         if args.json:
             output = {
@@ -244,6 +282,9 @@ def main():
                         "device": format_device_info(reverse[0]),
                     }
 
+            if sibling_info:
+                output["sibling"] = sibling_info
+
             print(json.dumps(output, indent=2))
         else:
             print(
@@ -258,13 +299,19 @@ def main():
                         f"Reverse: {format_device_info(dest_bus)} ({dest_bus}) {dest_port} -> {format_device_info(rev_bus)} ({rev_bus}) {rev_port}"
                     )
 
+            if sibling_info:
+                print(
+                    f"Sibling (shares QSFP-{sibling_info['qsfp_port']}): "
+                    f"{sibling_info['device']} ({sibling_info['bus_id']}) {sibling_info['eth_port']}"
+                )
+
     else:
         print("Error: Either specify an eth_port or use --all", file=sys.stderr)
         print("Run with --help for usage information", file=sys.stderr)
         sys.exit(1)
 
 
-def _output_qsfp_port(bus_id: str, eth_port: str, qsfp_port: int, json_format: bool) -> None:
+def _output_qsfp_port(bus_id: str, eth_port: str, qsfp_port: int, json_format: bool, sibling_info: Optional[dict] = None) -> None:
     """Output QSFP port mapping (current behavior without cable config).
 
     Args:
@@ -272,6 +319,7 @@ def _output_qsfp_port(bus_id: str, eth_port: str, qsfp_port: int, json_format: b
         eth_port: Source ETH port
         qsfp_port: QSFP port number
         json_format: Whether to output in JSON format
+        sibling_info: Optional sibling port information
     """
     ubb = get_ubb_from_bus_id(bus_id)
     if json_format:
@@ -287,23 +335,33 @@ def _output_qsfp_port(bus_id: str, eth_port: str, qsfp_port: int, json_format: b
                 "description": f"UBB{ubb} QSFP-{qsfp_port}",
             },
         }
+        if sibling_info:
+            output["sibling"] = sibling_info
         print(json.dumps(output, indent=2))
     else:
         print(
             f"{format_device_info(bus_id)} ({bus_id}) {eth_port} -> "
             f"UBB{ubb} QSFP-{qsfp_port}"
         )
+        if sibling_info:
+            print(
+                f"Sibling (shares QSFP-{sibling_info['qsfp_port']}): "
+                f"{sibling_info['device']} ({sibling_info['bus_id']}) {sibling_info['eth_port']}"
+            )
 
 
-def _output_cable_path(path_info: dict, json_format: bool, bidirectional: bool = False) -> None:
+def _output_cable_path(path_info: dict, json_format: bool, bidirectional: bool = False, sibling_info: Optional[dict] = None) -> None:
     """Output full cable path information with cable configuration.
 
     Args:
         path_info: Path information dictionary from get_cable_path()
         json_format: Whether to output in JSON format
         bidirectional: Whether to show bidirectional connection info (future use)
+        sibling_info: Optional sibling port information
     """
     if json_format:
+        if sibling_info:
+            path_info["sibling"] = sibling_info
         print(json.dumps(path_info, indent=2))
     else:
         src = path_info["source"]
@@ -317,6 +375,11 @@ def _output_cable_path(path_info: dict, json_format: bool, bidirectional: bool =
             f"{dst['bus_id']} {dst['eth_port']}"
         )
         print(output)
+        if sibling_info:
+            print(
+                f"Sibling (shares QSFP-{sibling_info['qsfp_port']}): "
+                f"{sibling_info['device']} ({sibling_info['bus_id']}) {sibling_info['eth_port']}"
+            )
 
 
 if __name__ == "__main__":

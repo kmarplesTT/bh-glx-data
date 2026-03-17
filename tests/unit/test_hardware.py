@@ -17,6 +17,7 @@ from bh_glx_data.hardware.platform_topology import (
     get_eth_ports_for_qsfp,
     get_port_status,
     get_qsfp_port,
+    get_qsfp_sibling_port,
     get_ubb_from_bus_id,
     normalize_bus_id,
     normalize_eth_port,
@@ -753,3 +754,162 @@ UBB1:
         assert path is not None
         assert path["cable"]["source_qsfp"] == 7
         assert path["cable"]["dest_qsfp"] == 8
+
+
+class TestQSFPSiblingPort:
+    """Test QSFP sibling port lookup functionality."""
+
+    def test_sibling_port_qsfp_7(self):
+        """Test sibling lookup for QSFP-7 (U1 ETH10, U2 ETH10)."""
+        # Query U1 ETH10, should return U2 ETH10
+        sibling = get_qsfp_sibling_port("01:00.0", "ETH10")
+        assert sibling is not None
+        assert sibling == ("02:00.0", "ETH10")
+
+        # Query U2 ETH10, should return U1 ETH10
+        sibling = get_qsfp_sibling_port("02:00.0", "ETH10")
+        assert sibling is not None
+        assert sibling == ("01:00.0", "ETH10")
+
+    def test_sibling_port_qsfp_1_same_chip(self):
+        """Test sibling lookup for QSFP-1 (U5 ETH02, U5 ETH03) - same chip."""
+        # Query U5 ETH02, should return U5 ETH03
+        sibling = get_qsfp_sibling_port("05:00.0", "ETH02")
+        assert sibling is not None
+        assert sibling == ("05:00.0", "ETH03")
+
+        # Query U5 ETH03, should return U5 ETH02
+        sibling = get_qsfp_sibling_port("05:00.0", "ETH03")
+        assert sibling is not None
+        assert sibling == ("05:00.0", "ETH02")
+
+    def test_sibling_port_qsfp_3(self):
+        """Test sibling lookup for QSFP-3 (U1 ETH00, U1 ETH01)."""
+        # Query U1 ETH00, should return U1 ETH01
+        sibling = get_qsfp_sibling_port("01:00.0", "ETH00")
+        assert sibling is not None
+        assert sibling == ("01:00.0", "ETH01")
+
+        # Query U1 ETH01, should return U1 ETH00
+        sibling = get_qsfp_sibling_port("01:00.0", "ETH01")
+        assert sibling is not None
+        assert sibling == ("01:00.0", "ETH00")
+
+    def test_sibling_port_qsfp_8(self):
+        """Test sibling lookup for QSFP-8 (U5 ETH10, U6 ETH10)."""
+        # Query U5 ETH10, should return U6 ETH10
+        sibling = get_qsfp_sibling_port("05:00.0", "ETH10")
+        assert sibling is not None
+        assert sibling == ("06:00.0", "ETH10")
+
+        # Query U6 ETH10, should return U5 ETH10
+        sibling = get_qsfp_sibling_port("06:00.0", "ETH10")
+        assert sibling is not None
+        assert sibling == ("05:00.0", "ETH10")
+
+    def test_sibling_port_qsfp_14(self):
+        """Test sibling lookup for QSFP-14 (U7 ETH11, U8 ETH11)."""
+        # Query U7 ETH11, should return U8 ETH11
+        sibling = get_qsfp_sibling_port("07:00.0", "ETH11")
+        assert sibling is not None
+        assert sibling == ("08:00.0", "ETH11")
+
+        # Query U8 ETH11, should return U7 ETH11
+        sibling = get_qsfp_sibling_port("08:00.0", "ETH11")
+        assert sibling is not None
+        assert sibling == ("07:00.0", "ETH11")
+
+    def test_sibling_port_different_ubbs(self):
+        """Test that sibling lookup works across different UBBs."""
+        # UBB2 U1 ETH10 should have sibling UBB2 U2 ETH10
+        sibling = get_qsfp_sibling_port("41:00.0", "ETH10")
+        assert sibling is not None
+        assert sibling == ("42:00.0", "ETH10")
+
+        # UBB3 U1 ETH10 should have sibling UBB3 U2 ETH10
+        sibling = get_qsfp_sibling_port("c1:00.0", "ETH10")
+        assert sibling is not None
+        assert sibling == ("c2:00.0", "ETH10")
+
+        # UBB4 U1 ETH10 should have sibling UBB4 U2 ETH10
+        sibling = get_qsfp_sibling_port("81:00.0", "ETH10")
+        assert sibling is not None
+        assert sibling == ("82:00.0", "ETH10")
+
+    def test_sibling_port_platform_connected(self):
+        """Test that platform-connected ports return None."""
+        # ETH04 is platform-connected, not a cable connector
+        sibling = get_qsfp_sibling_port("01:00.0", "ETH04")
+        assert sibling is None
+
+        # ETH07 is platform-connected
+        sibling = get_qsfp_sibling_port("01:00.0", "ETH07")
+        assert sibling is None
+
+    def test_sibling_port_unused(self):
+        """Test that unused ports return None."""
+        # ETH05 is unused
+        sibling = get_qsfp_sibling_port("01:00.0", "ETH05")
+        assert sibling is None
+
+        # ETH08 is unused
+        sibling = get_qsfp_sibling_port("01:00.0", "ETH08")
+        assert sibling is None
+
+    def test_sibling_port_unconnected(self):
+        """Test that unconnected ports return None."""
+        # ETH12 is unconnected
+        sibling = get_qsfp_sibling_port("01:00.0", "ETH12")
+        assert sibling is None
+
+        # ETH13 is unconnected
+        sibling = get_qsfp_sibling_port("01:00.0", "ETH13")
+        assert sibling is None
+
+    def test_sibling_port_all_qsfps(self):
+        """Test that all QSFP ports have valid siblings."""
+        # Test a representative port from each QSFP
+        test_cases = [
+            # (bus_id, eth_port, expected_sibling_bus, expected_sibling_port)
+            ("05:00.0", "ETH02", "05:00.0", "ETH03"),  # QSFP-1
+            ("01:00.0", "ETH02", "01:00.0", "ETH03"),  # QSFP-2
+            ("01:00.0", "ETH00", "01:00.0", "ETH01"),  # QSFP-3
+            ("02:00.0", "ETH00", "02:00.0", "ETH01"),  # QSFP-4
+            ("03:00.0", "ETH00", "03:00.0", "ETH01"),  # QSFP-5
+            ("04:00.0", "ETH00", "04:00.0", "ETH01"),  # QSFP-6
+            ("01:00.0", "ETH10", "02:00.0", "ETH10"),  # QSFP-7
+            ("05:00.0", "ETH10", "06:00.0", "ETH10"),  # QSFP-8
+            ("03:00.0", "ETH10", "04:00.0", "ETH10"),  # QSFP-9
+            ("07:00.0", "ETH10", "08:00.0", "ETH10"),  # QSFP-10
+            ("01:00.0", "ETH11", "02:00.0", "ETH11"),  # QSFP-11
+            ("05:00.0", "ETH11", "06:00.0", "ETH11"),  # QSFP-12
+            ("03:00.0", "ETH11", "04:00.0", "ETH11"),  # QSFP-13
+            ("07:00.0", "ETH11", "08:00.0", "ETH11"),  # QSFP-14
+        ]
+
+        for bus_id, eth_port, expected_bus, expected_port in test_cases:
+            sibling = get_qsfp_sibling_port(bus_id, eth_port)
+            assert sibling is not None, f"Expected sibling for {bus_id} {eth_port}"
+            assert sibling == (expected_bus, expected_port), (
+                f"Expected {bus_id} {eth_port} -> {expected_bus} {expected_port}, "
+                f"got {sibling}"
+            )
+
+    def test_sibling_port_symmetry(self):
+        """Test that sibling lookup is symmetric (A->B and B->A)."""
+        # Test several QSFP ports for symmetry
+        test_cases = [
+            ("01:00.0", "ETH10", "02:00.0", "ETH10"),  # QSFP-7
+            ("05:00.0", "ETH02", "05:00.0", "ETH03"),  # QSFP-1
+            ("01:00.0", "ETH00", "01:00.0", "ETH01"),  # QSFP-3
+            ("03:00.0", "ETH10", "04:00.0", "ETH10"),  # QSFP-9
+        ]
+
+        for bus_a, port_a, bus_b, port_b in test_cases:
+            # Forward: A -> B
+            sibling = get_qsfp_sibling_port(bus_a, port_a)
+            assert sibling == (bus_b, port_b), f"{bus_a} {port_a} should point to {bus_b} {port_b}"
+
+            # Reverse: B -> A
+            sibling = get_qsfp_sibling_port(bus_b, port_b)
+            assert sibling == (bus_a, port_a), f"{bus_b} {port_b} should point to {bus_a} {port_a}"
