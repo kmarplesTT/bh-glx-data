@@ -6,8 +6,11 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
+from bh_glx_data.core.exceptions import LaneSelectorError
 from bh_glx_data.system_analysis.database import DatabaseManager
 from bh_glx_data.system_analysis.query_engine import (
+    BERPlot,
+    BERPlotPoint,
     LaneBERStats,
     LaneSelector,
     QueryEngine,
@@ -354,3 +357,211 @@ class TestQueryAggregatedHostStats:
         assert hasattr(result, 'lane_id')
         assert len(result.host_stats) == 0
         assert result.num_systems == 0
+
+
+class TestQueryBERPlot:
+    """Test query_ber_plot method."""
+
+    def test_query_plot_single_lane(self, test_db):
+        """Test querying BER plot for single lane."""
+        engine = QueryEngine(test_db)
+        selector = LaneSelector.from_spec("sys1/01:00.0/ETH07/0")
+
+        result = engine.query_ber_plot(selector)
+
+        # Should return single BERPlot (not a list)
+        assert isinstance(result, BERPlot)
+        # Only sys1 should be included
+        assert result.num_systems == 1
+        # Should have 2 PASS rows from sys1
+        assert len(result.data_points) == 2
+
+    def test_query_plot_all_lanes(self, test_db):
+        """Test querying BER plot for all lanes on a port."""
+        engine = QueryEngine(test_db)
+        selector = LaneSelector.from_spec("sys1/01:00.0/ETH07")
+
+        result = engine.query_ber_plot(selector)
+
+        # Should return list of BERPlot
+        assert isinstance(result, list)
+        assert len(result) == 8  # 8 lanes
+
+    def test_query_plot_excludes_training_failures(self, test_db):
+        """Test that plot excludes TRAINING_FAIL rows."""
+        engine = QueryEngine(test_db)
+        selector = LaneSelector.from_spec("sys1/01:00.0/ETH07/0")
+
+        result = engine.query_ber_plot(selector)
+
+        # Should have 2 PASS data points from sys1 (excluding TRAINING_FAIL)
+        assert len(result.data_points) == 2
+
+    def test_query_plot_chronological_order(self, test_db):
+        """Test that plot data points are ordered chronologically."""
+        # Add data with different dates
+        conn = sqlite3.connect(test_db.db_path)
+        cursor = conn.cursor()
+
+        # Add entries in non-chronological order
+        test_data = [
+            ("sys3", "09:00.0", "ETH01", 200, "PASS", "2026-03-15", "test.csv", "2026-03-15T00:00:00",
+             1e-10, 2e-10, 3e-10, 4e-10, 5e-10, 6e-10, 7e-10, 8e-10),
+            ("sys3", "09:00.0", "ETH01", 200, "PASS", "2026-03-13", "test.csv", "2026-03-13T00:00:00",
+             1e-11, 2e-11, 3e-11, 4e-11, 5e-11, 6e-11, 7e-11, 8e-11),
+            ("sys3", "09:00.0", "ETH01", 200, "PASS", "2026-03-14", "test.csv", "2026-03-14T00:00:00",
+             1e-12, 2e-12, 3e-12, 4e-12, 5e-12, 6e-12, 7e-12, 8e-12),
+        ]
+
+        for data in test_data:
+            cursor.execute(
+                """
+                INSERT INTO prbs_tests (
+                    host, bus_id, eth_id, train_speed, test_status, date, source_file, ingestion_timestamp,
+                    acc_ber_lane0, acc_ber_lane1, acc_ber_lane2, acc_ber_lane3,
+                    acc_ber_lane4, acc_ber_lane5, acc_ber_lane6, acc_ber_lane7
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                data,
+            )
+
+        conn.commit()
+        conn.close()
+
+        engine = QueryEngine(test_db)
+        selector = LaneSelector.from_spec("sys3/09:00.0/ETH01/0")
+
+        result = engine.query_ber_plot(selector)
+
+        # Data points should be in chronological order
+        timestamps = [point.timestamp for point in result.data_points]
+        assert timestamps == ["2026-03-13", "2026-03-14", "2026-03-15"]
+
+        # BER values should match chronological order
+        ber_values = [point.ber_value for point in result.data_points]
+        assert ber_values == [1e-11, 1e-12, 1e-10]
+
+    def test_query_plot_requires_system_name(self, test_db):
+        """Test that plot requires specific system name."""
+        engine = QueryEngine(test_db)
+
+        # Should raise error for missing system name
+        selector = LaneSelector.from_spec("01:00.0/ETH07")
+        with pytest.raises(LaneSelectorError, match="BER plot requires specific system name"):
+            engine.query_ber_plot(selector)
+
+        # Should raise error for lane with missing system name
+        selector = LaneSelector.from_spec("01:00.0/ETH07/0")
+        with pytest.raises(LaneSelectorError, match="BER plot requires specific system name"):
+            engine.query_ber_plot(selector)
+
+    def test_query_plot_rejects_wildcard_system(self, test_db):
+        """Test that plot rejects wildcard system name."""
+        engine = QueryEngine(test_db)
+
+        # Should raise error for wildcard system
+        selector = LaneSelector.from_spec("*/01:00.0/ETH07")
+        with pytest.raises(LaneSelectorError, match="BER plot requires specific system name"):
+            engine.query_ber_plot(selector)
+
+    def test_query_plot_requires_specific_bus_id(self, test_db):
+        """Test that plot requires specific bus_id."""
+        engine = QueryEngine(test_db)
+
+        # Should raise error for wildcard bus_id
+        selector = LaneSelector.from_spec("sys1/*/ETH07")
+        with pytest.raises(LaneSelectorError, match="BER plot requires specific bus_id"):
+            engine.query_ber_plot(selector)
+
+    def test_query_plot_requires_specific_eth_id(self, test_db):
+        """Test that plot requires specific eth_id."""
+        engine = QueryEngine(test_db)
+
+        # Should raise error for wildcard eth_id
+        selector = LaneSelector.from_spec("sys1/01:00.0/*")
+        with pytest.raises(LaneSelectorError, match="BER plot requires specific eth_id"):
+            engine.query_ber_plot(selector)
+
+    def test_query_plot_speed_filter(self, test_db):
+        """Test filtering plot data by train speed."""
+        engine = QueryEngine(test_db)
+        selector = LaneSelector.from_spec("sys1/01:00.0/ETH07/0")
+
+        # Filter for speed 200
+        result = engine.query_ber_plot(selector, train_speeds=[200])
+        assert len(result.data_points) == 2  # sys1 has 2 PASS rows at speed 200
+
+        # Filter for speed 100 (sys1 has no rows at speed 100)
+        result = engine.query_ber_plot(selector, train_speeds=[100])
+        assert len(result.data_points) == 0  # sys1 has no rows at speed 100
+
+    def test_query_plot_data_point_structure(self, test_db):
+        """Test that BERPlotPoint has correct structure."""
+        engine = QueryEngine(test_db)
+        selector = LaneSelector.from_spec("sys1/01:00.0/ETH07/0")
+
+        result = engine.query_ber_plot(selector)
+
+        # Check first data point
+        point = result.data_points[0]
+        assert isinstance(point, BERPlotPoint)
+        assert isinstance(point.timestamp, str)
+        assert isinstance(point.ber_value, float)
+
+    def test_query_plot_empty_result(self, test_db):
+        """Test plot with no matching data."""
+        engine = QueryEngine(test_db)
+        selector = LaneSelector.from_spec("sys-nonexistent/99:00.0/ETH99/0")
+
+        result = engine.query_ber_plot(selector)
+
+        # Should return single empty plot
+        assert isinstance(result, BERPlot)
+        assert len(result.data_points) == 0
+        assert result.num_systems == 0
+
+    def test_query_plot_includes_high_ber(self, test_db):
+        """Test that plot includes high BER values."""
+        engine = QueryEngine(test_db)
+        selector = LaneSelector.from_spec("sys1/01:00.0/ETH07/0")
+
+        result = engine.query_ber_plot(selector)
+
+        # Should have 2 data points including the high BER value (0.5)
+        assert len(result.data_points) == 2
+        ber_values = [point.ber_value for point in result.data_points]
+        assert 1e-12 in ber_values
+        assert 0.5 in ber_values
+
+
+class TestBERPlotDataclass:
+    """Test BERPlot and BERPlotPoint dataclasses."""
+
+    def test_ber_plot_point_creation(self):
+        """Test creating BERPlotPoint."""
+        point = BERPlotPoint(
+            timestamp="2026-03-13",
+            ber_value=1.5e-12,
+        )
+
+        assert point.timestamp == "2026-03-13"
+        assert point.ber_value == 1.5e-12
+
+    def test_ber_plot_creation(self):
+        """Test creating BERPlot."""
+        points = [
+            BERPlotPoint("2026-03-13", 1e-12),
+            BERPlotPoint("2026-03-14", 2e-12),
+        ]
+
+        plot = BERPlot(
+            lane_id="sys1/01:00.0/ETH07/lane0",
+            data_points=points,
+            num_systems=1,
+            train_speeds=[200],
+        )
+
+        assert plot.lane_id == "sys1/01:00.0/ETH07/lane0"
+        assert len(plot.data_points) == 2
+        assert plot.num_systems == 1
+        assert plot.train_speeds == [200]

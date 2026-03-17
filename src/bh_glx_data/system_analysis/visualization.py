@@ -14,6 +14,7 @@ from rich.table import Table
 from bh_glx_data.system_analysis.query_engine import (
     AggregatedHostStats,
     BERHistogram,
+    BERPlot,
     BERStatistics,
     CustomThresholdCounts,
     ThresholdExceededCounts,
@@ -373,6 +374,64 @@ class TableRenderer:
                 self.console.print()  # Blank line
                 self.console.print(table2)
                 self.console.print()  # Blank line
+                self.console.print(footer, style="dim")
+
+            output_sections.append(capture.get())
+
+        # Join all sections with double blank lines if multiple lanes
+        return "\n\n".join(output_sections)
+
+    def render_ber_plot(
+        self,
+        plot: Union[BERPlot, List[BERPlot]],
+    ) -> str:
+        """Render BER plot data as table(s) of timestamps and BER values.
+
+        Args:
+            plot: BER plot data (single plot or list of plots)
+
+        Returns:
+            Formatted table string
+        """
+        # Normalize to list for uniform processing
+        plots = [plot] if isinstance(plot, BERPlot) else plot
+
+        if not plots:
+            return "No BER plot data available"
+
+        output_sections = []
+
+        # Render table for each lane
+        for ber_plot in plots:
+            table = Table(
+                title=f"BER Plot - {ber_plot.lane_id}",
+                show_header=True,
+                header_style="bold cyan",
+            )
+
+            table.add_column("Sample #", style="dim", justify="right")
+            table.add_column("Timestamp", style="dim")
+            table.add_column("BER Value", justify="right")
+
+            # Add rows for each data point
+            for idx, point in enumerate(ber_plot.data_points, start=1):
+                table.add_row(
+                    str(idx),
+                    point.timestamp,
+                    self._format_ber(point.ber_value),
+                )
+
+            # Footer
+            speeds_str = ", ".join(str(s) for s in ber_plot.train_speeds) if ber_plot.train_speeds else "all"
+            footer = (
+                f"Data Points: {len(ber_plot.data_points)}  |  "
+                f"Systems: {ber_plot.num_systems}  |  "
+                f"Speeds: {speeds_str}"
+            )
+
+            # Render table
+            with self.console.capture() as capture:
+                self.console.print(table)
                 self.console.print(footer, style="dim")
 
             output_sections.append(capture.get())

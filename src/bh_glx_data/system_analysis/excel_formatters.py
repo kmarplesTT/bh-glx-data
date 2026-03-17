@@ -9,13 +9,13 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 from openpyxl import Workbook, load_workbook
-from openpyxl.chart import BarChart, Reference
+from openpyxl.chart import BarChart, LineChart, Reference
 from openpyxl.chart.series import DataPoint
 from openpyxl.styles import Alignment, Color, Font, PatternFill
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.worksheet import Worksheet
 
-from bh_glx_data.system_analysis.query_engine import BERHistogram
+from bh_glx_data.system_analysis.query_engine import BERHistogram, BERPlot
 from bh_glx_data.system_analysis.visualization import ColorScheme
 
 logger = logging.getLogger(__name__)
@@ -558,6 +558,105 @@ def write_histogram_to_worksheet(
     # Adjust column widths
     ws.column_dimensions["A"].width = 20
     ws.column_dimensions["B"].width = 15
+
+    # Write metadata section if provided
+    if metadata:
+        row += 1  # Spacing
+        write_metadata_section(ws, row, metadata)
+
+
+def write_ber_plot_to_worksheet(
+    ws: Worksheet,
+    plot: Union[BERPlot, List[BERPlot]],
+    title: Optional[str] = None,
+    metadata: Optional[Dict[str, Any]] = None,
+) -> None:
+    """Write BER plot as Excel line chart with data table.
+
+    Data points are equally spaced on x-axis regardless of actual time intervals.
+
+    Args:
+        ws: Worksheet to write to
+        plot: BERPlot or list of plots
+        title: Optional title for worksheet
+        metadata: Optional summary data to append at bottom
+    """
+    row = 1
+
+    # Write title if provided
+    if title:
+        ws.cell(row, 1, title)
+        ws.cell(row, 1).font = Font(bold=True, size=14)
+        row += 2
+
+    # Handle single plot or list
+    plots = [plot] if isinstance(plot, BERPlot) else plot
+
+    # Process each plot
+    for ber_plot in plots:
+        # Write plot title
+        ws.cell(row, 1, f"BER Over Time - {ber_plot.lane_id}")
+        ws.cell(row, 1).font = Font(bold=True, size=12)
+        row += 1
+
+        # Write data table (Sample #, Timestamp, BER Value)
+        ws.cell(row, 1, "Sample #")
+        ws.cell(row, 1).font = Font(bold=True)
+        ws.cell(row, 2, "Timestamp")
+        ws.cell(row, 2).font = Font(bold=True)
+        ws.cell(row, 3, "BER Value")
+        ws.cell(row, 3).font = Font(bold=True)
+        row += 1
+
+        start_row = row
+        for idx, point in enumerate(ber_plot.data_points, start=1):
+            ws.cell(row, 1, idx)
+            ws.cell(row, 2, point.timestamp)
+            cell = ws.cell(row, 3, point.ber_value)
+            cell.number_format = "0.00E+00"  # Scientific notation
+            row += 1
+
+        # Create line chart
+        chart = LineChart()
+        chart.title = f"BER Over Time - {ber_plot.lane_id}"
+        chart.x_axis.title = "Sample Number"
+        chart.y_axis.title = "BER Value"
+
+        # Set chart dimensions
+        chart.width = 18  # Width in inches
+        chart.height = 10  # Height in inches
+
+        # Style settings
+        chart.style = 10  # Clean, professional style
+        chart.legend = None  # Remove legend (single series)
+
+        # Add data
+        # Use Sample # as categories (x-axis), BER Value as data (y-axis)
+        data = Reference(ws, min_col=3, min_row=start_row - 1, max_row=row - 1)
+        cats = Reference(ws, min_col=1, min_row=start_row, max_row=row - 1)
+        chart.add_data(data, titles_from_data=True)
+        chart.set_categories(cats)
+
+        # Format the line (make it visible and professional)
+        series = chart.series[0]
+        series.graphicalProperties.line.solidFill = "4472C4"  # Professional blue
+        series.graphicalProperties.line.width = 20000  # Line width in EMUs (thicker line)
+        series.smooth = True  # Smooth line
+
+        # Add data markers
+        series.marker.symbol = "circle"
+        series.marker.size = 5
+
+        # Position chart to the right of the data table
+        chart_cell = f"E{start_row - 1}"
+        ws.add_chart(chart, chart_cell)
+
+        row += 2  # Spacing between plots
+
+    # Adjust column widths
+    ws.column_dimensions["A"].width = 12  # Sample #
+    ws.column_dimensions["B"].width = 20  # Timestamp
+    ws.column_dimensions["C"].width = 15  # BER Value
 
     # Write metadata section if provided
     if metadata:

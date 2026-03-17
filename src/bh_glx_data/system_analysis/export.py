@@ -14,6 +14,7 @@ from bh_glx_data.system_analysis.database import DatabaseManager, DatabaseStats
 from bh_glx_data.system_analysis.excel_formatters import (
     create_or_open_workbook,
     generate_unique_worksheet_name,
+    write_ber_plot_to_worksheet,
     write_heatmap_to_worksheet,
     write_histogram_to_worksheet,
     write_table_to_worksheet,
@@ -21,6 +22,7 @@ from bh_glx_data.system_analysis.excel_formatters import (
 from bh_glx_data.system_analysis.query_engine import (
     AggregatedHostStats,
     BERHistogram,
+    BERPlot,
     BERStatistics,
     CustomThresholdCounts,
     ThresholdExceededCounts,
@@ -702,6 +704,77 @@ class ExcelExporter:
         except Exception as e:
             raise ExcelGenerationError(
                 f"Failed to export database info: {e}", output_path=str(output_path)
+            ) from e
+
+    def export_ber_plot(
+        self,
+        plot: Union[BERPlot, List[BERPlot]],
+        output_path: Path,
+        lane_spec: str,
+    ) -> ExcelExportResult:
+        """Export BER plot(s) to Excel with line chart.
+
+        Args:
+            plot: BERPlot or list of plots
+            output_path: Path to Excel file
+            lane_spec: Lane specification string for worksheet name
+
+        Returns:
+            ExcelExportResult with export details
+
+        Raises:
+            ExcelGenerationError: If export fails
+        """
+        try:
+            output_path = Path(output_path)
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+
+            # Create or open workbook
+            wb, file_existed = create_or_open_workbook(output_path)
+
+            # Generate worksheet name: "Plot - <lane_spec>"
+            base_name = f"Plot - {lane_spec}"
+            base_name = sanitize_worksheet_name(base_name)
+            ws_name = generate_unique_worksheet_name(wb, base_name)
+            ws = wb.create_sheet(ws_name)
+
+            # Normalize to list
+            plots = [plot] if isinstance(plot, BERPlot) else plot
+
+            # Prepare metadata
+            total_points = sum(len(p.data_points) for p in plots)
+            unique_systems = len(set(p.lane_id.split("/")[0] for p in plots if "/" in p.lane_id))
+
+            metadata = {
+                "Total Data Points": total_points,
+                "Unique Systems": unique_systems if unique_systems > 0 else "N/A",
+                "Lanes Plotted": len(plots),
+            }
+
+            # Check if train_speeds available (from first plot)
+            if plots and hasattr(plots[0], "train_speeds"):
+                metadata["Train Speeds"] = list(plots[0].train_speeds)
+
+            # Write plot
+            write_ber_plot_to_worksheet(
+                ws, plots, title=f"BER Plot - {lane_spec}", metadata=metadata
+            )
+
+            rows_written = sum(len(p.data_points) for p in plots)
+
+            # Save workbook
+            wb.save(output_path)
+
+            return ExcelExportResult(
+                output_path=output_path,
+                worksheet_name=ws_name,
+                rows_written=rows_written,
+                file_existed=file_existed,
+            )
+
+        except Exception as e:
+            raise ExcelGenerationError(
+                f"Failed to export BER plot: {e}", output_path=str(output_path)
             ) from e
 
     def _prepare_ber_statistics_table_data(self, stats: BERStatistics) -> Dict[str, List]:

@@ -187,6 +187,36 @@ class AggregatedHostStats:
     train_speeds: List[int]
 
 
+@dataclass
+class BERPlotPoint:
+    """Single BER plot data point.
+
+    Attributes:
+        timestamp: Date/time string from test execution
+        ber_value: BER value for this lane at this timestamp
+    """
+
+    timestamp: str
+    ber_value: float
+
+
+@dataclass
+class BERPlot:
+    """BER plot data for a single lane over time.
+
+    Attributes:
+        lane_id: Full lane identifier (e.g., "system/01:00.0/ETH07/lane4")
+        data_points: List of (timestamp, ber_value) tuples ordered by test sequence
+        num_systems: Number of systems included (should be 1 for plot)
+        train_speeds: List of train speeds included
+    """
+
+    lane_id: str
+    data_points: List[BERPlotPoint]
+    num_systems: int
+    train_speeds: List[int]
+
+
 class LaneSelector:
     """Specifies which serdes lanes to query.
 
@@ -1204,4 +1234,148 @@ class QueryEngine:
         except Exception as e:
             raise QueryError(
                 f"Failed to query aggregated host stats: {e}", lane_spec=str(lane_selector)
+            ) from e
+
+    def query_ber_plot(
+        self,
+        lane_selector: LaneSelector,
+        train_speeds: Optional[List[int]] = None,
+    ) -> Union[BERPlot, List[BERPlot]]:
+        """Query BER values for lane(s) over time.
+
+        Data points are ordered by the 'date' field to show chronological progression.
+        The specification requires:
+        - System name, bus_id, and eth_id must be specified (no wildcards)
+        - Lane number is optional (if not specified, plots for all 8 lanes are returned)
+
+        Plotting BER over time only makes sense for a single system, so the lane
+        specification must include a specific system name.
+
+        Args:
+            lane_selector: Lane specification (must include system/bus_id/eth_id)
+            train_speeds: Filter by speeds (None = all)
+
+        Returns:
+            Single BERPlot if single lane specified,
+            List[BERPlot] if multiple lanes (all 8 lanes on a port)
+
+        Raises:
+            QueryError: If query fails
+            LaneSelectorError: If lane selector doesn't include system name or uses wildcards
+        """
+        try:
+            # Validate that we have specific system name (not wildcard, not missing)
+            if not lane_selector.host or lane_selector.host == "*":
+                raise LaneSelectorError(
+                    "BER plot requires specific system name (e.g., 'bh-glx-c02u02/01:00.0/ETH07'). "
+                    "Plotting BER over time only makes sense for a single system.",
+                    spec=str(lane_selector)
+                )
+
+            # Validate that we have specific bus_id and eth_id (not wildcards)
+            if not lane_selector.bus_id or lane_selector.bus_id == "*":
+                raise LaneSelectorError(
+                    "BER plot requires specific bus_id (e.g., 'bh-glx-c02u02/01:00.0/ETH07')",
+                    spec=str(lane_selector)
+                )
+            if not lane_selector.eth_id or lane_selector.eth_id == "*":
+                raise LaneSelectorError(
+                    "BER plot requires specific eth_id (e.g., 'bh-glx-c02u02/01:00.0/ETH07')",
+                    spec=str(lane_selector)
+                )
+
+            # Build query
+            where_clause, params = lane_selector.to_sql_filter()
+
+            # Add speed filter
+            if train_speeds:
+                speed_placeholders = ", ".join(["?" for _ in train_speeds])
+                where_clause += f" AND train_speed IN ({speed_placeholders})"
+                params = params + tuple(train_speeds)
+
+            # Always exclude training failures (no BER data)
+            where_clause += " AND test_status != 'TRAINING_FAIL'"
+
+            # Order by date to show chronological progression
+            query = f"SELECT * FROM prbs_tests WHERE {where_clause} ORDER BY date ASC"
+
+            # Execute query
+            df = self.db.execute_query(query, params)
+
+            if df.empty:
+                logger.warning(f"No data found for lane selector: {lane_selector}")
+                # Return empty plot(s)
+                lane_columns = lane_selector.get_lane_columns(self.LANE_COLUMNS)
+                if lane_selector.lane_num is not None:
+                    # Single lane requested
+                    return BERPlot(
+                        lane_id=f"{lane_selector.spec}",
+                        data_points=[],
+                        num_systems=0,
+                        train_speeds=train_speeds or [],
+                    )
+                else:
+                    # Multiple lanes requested
+                    return []
+
+            # Get lane columns to process
+            lane_columns = lane_selector.get_lane_columns(self.LANE_COLUMNS)
+
+            # Metadata
+            num_systems = df["host"].nunique()
+            speeds = sorted(df["train_speed"].unique().tolist())
+
+            # Build plots for each lane
+            plots = []
+
+            for lane_col in lane_columns:
+                lane_num = int(lane_col.replace("acc_ber_lane", ""))
+
+                # Process each unique bus_id/eth_id combination
+                for (bus_id, eth_id), group in df.groupby(["bus_id", "eth_id"]):
+                    # Build lane ID - include host if specified
+                    if lane_selector.host and lane_selector.host != "*":
+                        lane_id = f"{lane_selector.host}/{bus_id}/{eth_id}/lane{lane_num}"
+                    else:
+                        # If host was not specified but there's only one host, include it
+                        if num_systems == 1:
+                            host = group["host"].iloc[0]
+                            lane_id = f"{host}/{bus_id}/{eth_id}/lane{lane_num}"
+                        else:
+                            lane_id = f"{bus_id}/{eth_id}/lane{lane_num}"
+
+                    # Extract data points (timestamp, ber_value)
+                    data_points = []
+                    for _, row in group.iterrows():
+                        ber_value = row[lane_col]
+                        if pd.notna(ber_value):
+                            data_points.append(
+                                BERPlotPoint(
+                                    timestamp=row["date"],
+                                    ber_value=float(ber_value),
+                                )
+                            )
+
+                    if data_points:
+                        plots.append(
+                            BERPlot(
+                                lane_id=lane_id,
+                                data_points=data_points,
+                                num_systems=num_systems,
+                                train_speeds=speeds,
+                            )
+                        )
+
+            # Return single plot or list based on lane_num specification
+            if lane_selector.lane_num is not None and len(plots) == 1:
+                return plots[0]
+            else:
+                return plots
+
+        except LaneSelectorError:
+            # Re-raise lane selector errors
+            raise
+        except Exception as e:
+            raise QueryError(
+                f"Failed to query BER plot: {e}", lane_spec=str(lane_selector)
             ) from e

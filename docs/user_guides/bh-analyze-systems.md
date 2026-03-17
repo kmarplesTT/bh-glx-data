@@ -11,6 +11,7 @@ A database utility for collecting, storing, and analyzing PRBS test data across 
 
 Version 0.6.0 introduces powerful new analysis capabilities and improves variance visualization:
 
+- **BER Plotting** - New `plot` command displays BER values over time for specific lanes, showing chronological progression across multiple test runs with optional Excel line chart export
 - **Histogram Analysis** - New `histogram` command displays BER distribution across logarithmic bins, helping identify whether failures are clustered at specific BER levels or spread across ranges
 - **Advanced Statistics** - New `advanced-stats` command computes per-host BER statistics and then aggregates them fleet-wide, revealing performance consistency across multiple systems
 - **Extended Lane Selection** - Lane specifications now support specific lane numbers (e.g., `01:00.0/ETH07/4` for lane 4), enabling targeted single-lane analysis
@@ -111,6 +112,9 @@ The tool provides several types of queries:
 2. **Threshold Exceeded** - Count of BER_THRESHOLD_EXCEEDED test status occurrences
 3. **Custom Threshold** - Count of lanes exceeding a custom BER threshold
 4. **Training Failures** - Count of TRAINING_FAIL test status occurrences
+5. **Histogram** - BER distribution across logarithmic bins for specific lane(s)
+6. **Advanced Statistics** - Per-host BER statistics with fleet-wide aggregation
+7. **Plot** - BER values over time showing chronological progression
 
 **Note:** Training failures (TRAINING_FAIL status) are always excluded from BER calculations since they don't produce valid BER data. BER values >= 0.1 are counted separately as "high BER" and excluded from min/avg/max calculations in the BER Statistics query.
 
@@ -548,6 +552,134 @@ The histogram uses 10 logarithmic bins to categorize BER values:
 
 ---
 
+### plot
+
+Plot BER values for a serdes lane over time, showing how BER evolves across multiple test runs.
+
+```bash
+bh-analyze-systems plot <lane_spec> [OPTIONS]
+```
+
+**Arguments:**
+
+- `lane_spec` - Lane specification (must include system name, bus_id, and eth_id; lane number is optional)
+
+**Options:**
+
+- `--speed SPEED` - Filter by train speed
+- `--excel-output FILE` - Export results to Excel file with line chart
+
+**Lane Selection Requirements:**
+
+The plot command requires a specific system name, bus_id, and eth_id (no wildcards allowed). Plotting BER over time only makes sense for a single system. You can optionally specify a lane number:
+
+- `bh-glx-c02u02/01:00.0/ETH07` - Plots all 8 lanes on the port (generates 8 separate plots)
+- `bh-glx-c02u02/01:00.0/ETH07/4` - Plots only lane 4 (generates single plot)
+
+**Invalid specifications (will produce an error):**
+
+- `01:00.0/ETH07` - Missing system name
+- `01:00.0/ETH07/4` - Missing system name
+- `*/01:00.0/ETH07` - Wildcards not allowed
+- `bh-glx-c02u02/*` - Wildcards not allowed
+
+**Example (Single Lane):**
+
+```bash
+# Plot BER values for a specific lane
+bh-analyze-systems plot bh-glx-c02u02/01:00.0/ETH07/4 --speed 200
+
+# Output:
+BER Plot - bh-glx-c02u02/01:00.0/ETH07/lane4
+┌──────────┬─────────────────────┬────────────┐
+│ Sample # │ Timestamp           │ BER Value  │
+├──────────┼─────────────────────┼────────────┤
+│ 1        │ 2026-01-15 10:23:45 │ 1.23e-12   │
+│ 2        │ 2026-01-15 14:15:22 │ 2.34e-11   │
+│ 3        │ 2026-01-16 09:05:18 │ 1.87e-10   │
+│ 4        │ 2026-01-16 16:42:33 │ 4.56e-10   │
+│ 5        │ 2026-01-17 11:28:09 │ 3.21e-11   │
+└──────────┴─────────────────────┴────────────┘
+
+Total Data Points: 5  |  Systems: 1  |  Speeds: 200
+```
+
+**Example (All Lanes on Port):**
+
+```bash
+# Plot all 8 lanes on a port
+bh-analyze-systems plot bh-glx-c02u02/01:00.0/ETH07 --speed 200
+
+# Output:
+BER Plot - bh-glx-c02u02/01:00.0/ETH07/lane0
+┌──────────┬─────────────────────┬────────────┐
+│ Sample # │ Timestamp           │ BER Value  │
+├──────────┼─────────────────────┼────────────┤
+│ 1        │ 2026-01-15 10:23:45 │ 1.23e-12   │
+│ 2        │ 2026-01-15 14:15:22 │ 2.34e-11   │
+[... additional samples ...]
+└──────────┴─────────────────────┴────────────┘
+
+BER Plot - bh-glx-c02u02/01:00.0/ETH07/lane1
+┌──────────┬─────────────────────┬────────────┐
+│ Sample # │ Timestamp           │ BER Value  │
+├──────────┼─────────────────────┼────────────┤
+│ 1        │ 2026-01-15 10:23:45 │ 8.90e-13   │
+│ 2        │ 2026-01-15 14:15:22 │ 1.87e-11   │
+[... additional samples ...]
+└──────────┴─────────────────────┴────────────┘
+
+[... lanes 2-7 ...]
+
+Total Data Points: 40  |  Systems: 1  |  Speeds: 200
+```
+
+**Example (Excel Export):**
+
+```bash
+# Export single lane plot to Excel
+bh-analyze-systems plot bh-glx-c02u02/01:00.0/ETH07/4 --speed 200 --excel-output ber_trend.xlsx
+
+# Export all lanes on port
+bh-analyze-systems plot bh-glx-c02u02/01:00.0/ETH07 --speed 200 --excel-output ber_trend.xlsx
+```
+
+**Excel Output:**
+
+When exporting to Excel, the plot command creates:
+
+- **Data Table** - Sample number, timestamp, and BER value columns
+- **Line Chart** - Excel line chart showing BER evolution over time
+   - X-axis: Sample number (equally-spaced data points)
+   - Y-axis: BER value (logarithmic scale recommended for viewing)
+   - One series per lane when multiple lanes are plotted
+- **Metadata Section** - Total data points, systems analyzed, lanes plotted, train speeds
+
+**Data Ordering:**
+
+Data points are sorted chronologically by test execution date (the `date` field in the database), showing how BER evolves over time as tests are run repeatedly on the same lane.
+
+**Use Cases:**
+
+- Track BER stability over time for a specific lane
+- Identify if BER is degrading or improving across multiple test runs
+- Detect intermittent issues that appear periodically
+- Correlate BER changes with system modifications or environmental factors
+- Compare BER trends across multiple lanes on the same port
+- Verify if BER issues are consistent or sporadic
+
+**Tips:**
+
+- System name is required for plot command (e.g., `bh-glx-c02u02/01:00.0/ETH07/4`)
+- Single-lane plots (e.g., `bh-glx-c02u02/01:00.0/ETH07/4`) are best for detailed time-series analysis
+- Port-level plots (e.g., `bh-glx-c02u02/01:00.0/ETH07`) show all 8 lanes for comparison
+- Use `--speed` to focus on specific training speeds if multiple speeds are tested
+- Excel line charts are ideal for visualizing trends and spotting patterns
+- Look for sudden BER spikes that might indicate cable issues or environmental changes
+- Consistent BER over time suggests stable hardware; increasing BER suggests degradation
+
+---
+
 ### advanced-stats
 
 Show aggregated host statistics with fleet-wide performance consistency analysis.
@@ -821,6 +953,8 @@ The lane selection syntax allows flexible queries across systems, ports, and lan
 
 **New in v0.6.0:** Lane numbers (0-7) can be specified as the fourth component to target individual serdes lanes.
 
+**Note for plot command:** The `plot` command requires a specific system name, bus_id, and eth_id (no wildcards allowed). System name is mandatory because plotting BER over time only makes sense for a single system. Lane number is optional - if omitted, plots are generated for all 8 lanes on the port.
+
 ### Examples
 
 ```bash
@@ -832,6 +966,12 @@ bh-analyze-systems stats "01:00.0/ETH07"
 
 # Query specific lane on port (NEW in v0.6.0)
 bh-analyze-systems stats "01:00.0/ETH07/4"
+
+# Plot BER over time for specific lane (requires system name)
+bh-analyze-systems plot "bh-glx-c02u02/01:00.0/ETH07/4"
+
+# Plot BER over time for all lanes on port (requires system name)
+bh-analyze-systems plot "bh-glx-c02u02/01:00.0/ETH07"
 
 # Query all ports on a bus ID
 bh-analyze-systems stats "01:00.0/*"
@@ -1174,6 +1314,16 @@ bh-analyze-systems histogram 01:00.0/ETH07 --speed 200 --excel-output histogram.
 bh-analyze-systems advanced-stats */ETH07/4 --speed 200 --excel-output advanced.xlsx
 ```
 
+**Plot Command:**
+
+```bash
+# Export single lane plot with line chart (requires system name)
+bh-analyze-systems plot bh-glx-c02u02/01:00.0/ETH07/4 --speed 200 --excel-output ber_trend.xlsx
+
+# Export multiple lane plots (requires system name)
+bh-analyze-systems plot bh-glx-c02u02/01:00.0/ETH07 --speed 200 --excel-output ber_trend.xlsx
+```
+
 **Info Command:**
 
 ```bash
@@ -1190,13 +1340,15 @@ You can build a single Excel file with multiple worksheets by running multiple c
 bh-analyze-systems stats all --speed 200 --format heatmap --excel-output report.xlsx
 bh-analyze-systems training all --speed 200 --format heatmap --excel-output report.xlsx
 bh-analyze-systems histogram 01:00.0/ETH07/4 --speed 200 --excel-output report.xlsx
+bh-analyze-systems plot bh-glx-c02u02/01:00.0/ETH07/4 --speed 200 --excel-output report.xlsx
 bh-analyze-systems advanced-stats */ETH07/4 --speed 200 --excel-output report.xlsx
 bh-analyze-systems info --excel-output report.xlsx
 
-# Result: report.xlsx with 5 worksheets:
+# Result: report.xlsx with 6 worksheets:
 #   - Stats - all
 #   - Training - all
 #   - Histogram - 01:00.0/ETH07/4
+#   - Plot - bh-glx-c02u02/01:00.0/ETH07/4
 #   - Advanced Stats - */ETH07/4
 #   - Database Info
 ```
@@ -1234,6 +1386,16 @@ bh-analyze-systems info --excel-output report.xlsx
 - Gray header backgrounds
 - Summary metadata at bottom
 
+**Plot Format:**
+
+- Data table with sample number, timestamp, and BER value columns
+- Excel line chart showing BER evolution over time
+   - X-axis: Sample number (equally-spaced)
+   - Y-axis: BER value
+   - One series per lane when multiple lanes plotted
+- Multiple plots shown separately (when querying all lanes on a port)
+- Summary metadata at bottom
+
 ### Worksheet Naming
 
 Worksheets are named using the pattern: `<Command> - <lane_spec>`
@@ -1246,6 +1408,7 @@ Examples:
 - `Histogram - 01:00.0/ETH07/4`
 - `Training - all`
 - `Advanced Stats - */ETH07/4`
+- `Plot - bh-glx-c02u02/01:00.0/ETH07/4`
 - `Database Info`
 
 If a worksheet name already exists (e.g., running the same query twice), a counter is appended:
@@ -1288,6 +1451,7 @@ bh-analyze-systems shell
 - `training <lane-spec> [--speed SPEED] [--format FORMAT]` - Training failure counts
 - `histogram <lane-spec> [--speed SPEED] [--max-bar-width WIDTH]` - BER distribution histogram
 - `advanced-stats <lane-spec> [--speed SPEED]` - Aggregated host statistics
+- `plot <lane-spec> [--speed SPEED]` - BER values over time (requires system name, bus_id, and eth_id)
 
 **Information Commands:**
 
@@ -1326,6 +1490,9 @@ bh-analyze> histogram 01:00.0/ETH07/4 --speed 200
 
 bh-analyze> advanced-stats */ETH07/4 --speed 200
 [displays per-host statistics and aggregated statistics for lane 4 across all systems]
+
+bh-analyze> plot bh-glx-c02u02/01:00.0/ETH07/4 --speed 200
+[displays BER values over time for lane 4 on specified system]
 ```
 
 ### Shell Features
@@ -1601,7 +1768,40 @@ bh-analyze-systems advanced-stats */ETH07/4 --speed 200 --excel-output fleet_con
 - Understand if issues are hardware-specific or environmental
 - Prioritize which systems need attention first
 
-### Workflow 9: Integration with Jira Data
+### Workflow 9: BER Trend Analysis Over Time
+
+```bash
+# 1. Identify problematic lanes using heatmap
+bh-analyze-systems stats all --speed 200 --format heatmap --statistic avg
+
+# 2. Focus on lane with high variance or high BER
+bh-analyze-systems stats bh-glx-c02u02/01:00.0/ETH07/4 --speed 200
+
+# 3. Plot BER over time to see if it's degrading or intermittent (requires system name)
+bh-analyze-systems plot bh-glx-c02u02/01:00.0/ETH07/4 --speed 200
+
+# 4. View histogram to understand BER distribution
+bh-analyze-systems histogram bh-glx-c02u02/01:00.0/ETH07/4 --speed 200
+
+# 5. Export trend analysis to Excel with line chart
+bh-analyze-systems plot bh-glx-c02u02/01:00.0/ETH07/4 --speed 200 --excel-output ber_trend.xlsx
+
+# 6. Compare all lanes on the port to see if issue is lane-specific
+bh-analyze-systems plot bh-glx-c02u02/01:00.0/ETH07 --speed 200 --excel-output ber_trend.xlsx
+```
+
+**Use Case:** This workflow helps you determine if BER issues are:
+
+- **Degrading over time** - BER values steadily increasing in plot
+- **Intermittent** - Periodic spikes visible in plot
+- **Consistent** - Stable BER values across all test runs
+- **Lane-specific** - Only one lane shows issues when plotting all lanes on port
+
+By combining the plot (time-series), histogram (distribution), and stats (summary) views, you get a complete picture of lane behavior.
+
+---
+
+### Workflow 10: Integration with Jira Data
 
 ```bash
 # 1. Retrieve data from Jira
@@ -1680,6 +1880,19 @@ bh-analyze-systems stats "bh-glx-c02u02/*"
 ```
 
 Note: Use quotes around specifications with wildcards or special characters.
+
+**Special case for plot command:**
+
+The plot command requires a system name in the lane specification:
+
+```bash
+# Correct for plot:
+bh-analyze-systems plot "bh-glx-c02u02/01:00.0/ETH07/4"
+
+# Incorrect for plot (missing system name):
+bh-analyze-systems plot "01:00.0/ETH07/4"
+# ERROR: plot command requires system name in lane specification
+```
 
 ### Memory Issues During Ingestion
 

@@ -279,6 +279,30 @@ Lane Specifications:
         help="Export results to Excel file (creates new file or adds worksheet to existing)",
     )
 
+    # Plot command
+    plot_parser = subparsers.add_parser(
+        "plot",
+        help="Plot BER values for a lane over time",
+    )
+    plot_parser.add_argument(
+        "lane_spec",
+        type=str,
+        help="Lane specification (requires system/bus_id/eth_id, e.g., 'bh-glx-c02u02/01:00.0/ETH07' or 'bh-glx-c02u02/01:00.0/ETH07/4')",
+    )
+    plot_parser.add_argument(
+        "--speed",
+        type=int,
+        action="append",
+        dest="speeds",
+        help="Filter by train speed",
+    )
+    plot_parser.add_argument(
+        "--excel-output",
+        type=Path,
+        metavar="FILE",
+        help="Export results to Excel file with line chart (creates new file or adds worksheet to existing)",
+    )
+
     # Info command
     info_parser = subparsers.add_parser("info", help="Show database information")
     info_parser.add_argument(
@@ -678,6 +702,54 @@ def handle_advanced_stats(db: DatabaseManager, args: argparse.Namespace) -> int:
         return 1
 
 
+def handle_plot(db: DatabaseManager, args: argparse.Namespace) -> int:
+    """Handle plot command.
+
+    Args:
+        db: DatabaseManager instance
+        args: Parsed arguments
+
+    Returns:
+        Exit code (0 for success, 1 for error)
+    """
+    try:
+        selector = LaneSelector.from_spec(args.lane_spec)
+        engine = QueryEngine(db)
+
+        result = engine.query_ber_plot(selector, train_speeds=args.speeds)
+
+        # Terminal output (if no Excel export or if verbose)
+        if not args.excel_output or args.verbose:
+            renderer = TableRenderer()
+            output = renderer.render_ber_plot(result)
+            print(output)
+
+        # Excel export (if requested)
+        if args.excel_output:
+            exporter = ExcelExporter(db)
+            export_result = exporter.export_ber_plot(
+                result,
+                args.excel_output,
+                lane_spec=args.lane_spec,
+            )
+            logger.info(f"\nExported to: {export_result.output_path}")
+            logger.info(f"Worksheet: {export_result.worksheet_name}")
+            logger.info(f"Rows written: {export_result.rows_written}")
+
+        return 0
+
+    except LaneSelectorError as e:
+        logger.error(f"Invalid lane specification: {e}")
+        return 1
+    except QueryError as e:
+        logger.error(f"Query failed: {e}")
+        return 1
+    except Exception as e:
+        logger.error(f"Unexpected error: {e}")
+        logger.debug("", exc_info=True)
+        return 1
+
+
 def handle_info(db: DatabaseManager, args: argparse.Namespace) -> int:
     """Handle info command.
 
@@ -793,7 +865,7 @@ def main():
         db = DatabaseManager(db_path)
 
         # Initialize schema if this is a new database or command is not info/shell
-        if args.command in ["ingest", "stats", "threshold", "custom", "training", "histogram", "advanced-stats"]:
+        if args.command in ["ingest", "stats", "threshold", "custom", "training", "histogram", "advanced-stats", "plot"]:
             db.initialize_schema()
         elif args.command in ["info", "shell"]:
             # For info and shell, only initialize if database doesn't exist
@@ -822,6 +894,8 @@ def main():
         return handle_histogram(db, args)
     elif args.command == "advanced-stats":
         return handle_advanced_stats(db, args)
+    elif args.command == "plot":
+        return handle_plot(db, args)
     elif args.command == "info":
         return handle_info(db, args)
     elif args.command == "shell":
