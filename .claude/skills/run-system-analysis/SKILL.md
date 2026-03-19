@@ -31,3 +31,18 @@ Use the `bh-analyze-systmes` tool to create a report targetting BER of 1e-6 or w
 - Include `histogram` and `advanced-stats` for all lanes that have 10 or greater occurrences of BER of 1e-6 or worse
   - The `histogram` and `advanced-stats` worksheets for a particular lane should be grouped together in the worksheet tab bar
 - Use the `advanced-stats` to find the hosts on with BER was 1e-6 or worse and include a `plot` for the lane on that system
+
+## Generate lane performance analysis summary
+
+After completing the Excel report, generate a comprehensive lane performance analysis markdown file:
+
+1. Query the database to analyze which lanes perform more poorly than others across all systems
+2. Create a markdown report with the same filename as the Excel report but with `.md` extension
+3. The analysis should include:
+   - Lane distribution of BER issues (percentage breakdown by lane)
+   - ETH port performance analysis
+   - Critical patterns (e.g., specific bus_id/ETH/lane combinations affecting multiple systems)
+   - Systematic vs isolated issues
+   - Top problematic combinations by occurrence
+   - Conclusions and recommendations for hardware/firmware teams
+4. Save the markdown file to `.claude/skills/run-system-analysis/reports/` with matching timestamp to the Excel report
