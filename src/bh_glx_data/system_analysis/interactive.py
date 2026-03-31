@@ -504,13 +504,14 @@ Examples:
             # Terminal output
             print("\nDatabase Information:")
             print(f"  Database: {self.query_engine.db.db_path}")
+            print(f"  Total samples: {stats.total_samples:,}")
             print(f"  Total tests: {stats.total_tests:,}")
             print(f"  Unique systems: {stats.unique_hosts}")
             print(f"  Train speeds: {', '.join(str(s) for s in stats.unique_speeds)}")
             print(f"  Date range: {stats.date_range[0]} to {stats.date_range[1]}")
             print(f"\n  Status breakdown:")
             for status, count in stats.status_breakdown.items():
-                percentage = (count / stats.total_tests * 100) if stats.total_tests > 0 else 0
+                percentage = (count / stats.total_samples * 100) if stats.total_samples > 0 else 0
                 print(f"    {status}: {count:,} ({percentage:.1f}%)")
             print(f"\n  Total ingestions: {stats.total_ingestions}\n")
 

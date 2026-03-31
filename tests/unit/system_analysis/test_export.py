@@ -164,7 +164,8 @@ def sample_aggregated_stats():
 def sample_database_stats():
     """Create sample database statistics."""
     return DatabaseStats(
-        total_tests=1000,
+        total_samples=1000,
+        total_tests=3,
         unique_hosts=5,
         unique_speeds=[200, 400],
         date_range=("2026-01-01", "2026-03-16"),
@@ -511,15 +512,20 @@ class TestExportDatabaseInfo:
         # Check database info appears
         assert ws.cell(3, 1).value == "Property"  # Header row (after title)
 
-        # Check specific properties - now stored as numeric value
+        # Check specific properties - now stored as numeric values
+        found_total_samples = False
         found_total_tests = False
         for row in ws.iter_rows():
-            if row[0].value == "Total Tests":
-                found_total_tests = True
+            if row[0].value == "Total Samples":
+                found_total_samples = True
                 # Value should be numeric (1000), not string ("1,000")
                 assert row[1].value == 1000
-                break
+            elif row[0].value == "Total Tests":
+                found_total_tests = True
+                # Value should be numeric (3), not string ("3")
+                assert row[1].value == 3
 
+        assert found_total_samples
         assert found_total_tests
 
     def test_export_database_info_with_status_breakdown(

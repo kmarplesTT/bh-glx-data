@@ -34,7 +34,8 @@ class DatabaseStats:
     """Database statistics.
 
     Attributes:
-        total_tests: Total number of test records
+        total_samples: Total number of individual test records (rows)
+        total_tests: Number of unique test runs (unique host+timestamp combinations)
         unique_hosts: Number of unique hostnames
         unique_speeds: List of unique train speeds
         status_breakdown: Dictionary of test counts by status
@@ -42,6 +43,7 @@ class DatabaseStats:
         total_ingestions: Number of ingestion runs recorded
     """
 
+    total_samples: int
     total_tests: int
     unique_hosts: int
     unique_speeds: List[int]
@@ -368,8 +370,13 @@ class DatabaseManager:
         Returns:
             DatabaseStats object with summary information
         """
-        # Total tests
-        total_tests = self.execute_scalar("SELECT COUNT(*) FROM prbs_tests") or 0
+        # Total samples (individual records/rows)
+        total_samples = self.execute_scalar("SELECT COUNT(*) FROM prbs_tests") or 0
+
+        # Total tests (unique test runs = unique host+timestamp combinations)
+        total_tests = self.execute_scalar(
+            "SELECT COUNT(DISTINCT host || '|' || date) FROM prbs_tests"
+        ) or 0
 
         # Unique hosts
         unique_hosts = self.execute_scalar("SELECT COUNT(DISTINCT host) FROM prbs_tests") or 0
@@ -408,6 +415,7 @@ class DatabaseManager:
         )
 
         return DatabaseStats(
+            total_samples=total_samples,
             total_tests=total_tests,
             unique_hosts=unique_hosts,
             unique_speeds=speeds,

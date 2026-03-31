@@ -641,6 +641,7 @@ class ExcelExporter:
             data = {
                 "Property": [
                     "Database Path",
+                    "Total Samples",
                     "Total Tests",
                     "Unique Systems",
                     "Train Speeds",
@@ -650,6 +651,7 @@ class ExcelExporter:
                 ],
                 "Value": [
                     str(self.db.db_path),
+                    info.total_samples,  # Store as number
                     info.total_tests,  # Store as number
                     info.unique_hosts,  # Store as number
                     ", ".join(str(s) for s in info.unique_speeds),  # Keep as string (comma-separated)
@@ -665,12 +667,13 @@ class ExcelExporter:
                     "",
                     "",
                     "",
+                    "",
                 ],
             }
 
             # Add status breakdown with counts as numbers and percentages
             for status, count in info.status_breakdown.items():
-                percentage = (count / info.total_tests * 100) if info.total_tests > 0 else 0
+                percentage = (count / info.total_samples * 100) if info.total_samples > 0 else 0
                 data["Property"].append(f"  {status}")
                 data["Value"].append(count)  # Store count as number
                 data["Percentage"].append(percentage / 100)  # Store as decimal for percentage formatting
