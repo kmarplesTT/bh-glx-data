@@ -2,12 +2,24 @@
 
 A database utility for collecting, storing, and analyzing PRBS test data across multiple systems. This tool provides efficient query capabilities with visualization options for identifying serdes lane performance patterns.
 
-**Version:** 0.6.0
+**Version:** 0.7.0
 **Purpose:** Aggregate PRBS test data from CSV files with memory-efficient storage and interactive analysis
 
 ---
 
-## What's New in Version 0.6.0
+## What's New in Version 0.7.0
+
+Version 0.7.0 introduces **per-UBB analysis mode**, enabling PCB-level pattern detection across multiple systems:
+
+- **Per-UBB Analysis** - New `--by-ubb-position` flag normalizes data by chip position (U1-U8) instead of absolute bus_id, treating chips at the same position across all 4 UBBs as equivalent
+- **4x Sample Size** - Aggregates data from bus_ids 0x:00.0, 4x:00.0, cx:00.0, and 8x:00.0 together, providing 4x more samples for statistical analysis
+- **Chip Position Syntax** - Supports chip position format (U1-U8) in addition to bus_id format for intuitive queries
+- **PCB Trace Analysis** - Enables detection of patterns related to PCB trace routing, which is identical across all 4 UBBs
+- **Complete Integration** - Works with all commands (stats, threshold, training, histogram, advanced-stats) and Excel export
+
+**See the dedicated [Per-UBB Analysis User Guide](./bh-analyze-systems-per-ubb.md) for detailed documentation and usage examples.**
+
+### Version 0.6.0 Highlights
 
 Version 0.6.0 introduces powerful new analysis capabilities and improves variance visualization:
 

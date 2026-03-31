@@ -24,6 +24,8 @@ Before starting, activate virtual environment to enable tools: `source .venv/bin
 
 Use the `bh-analyze-systmes` tool to create a report targetting BER of 1e-6 or worse. Put the file in `.claude/skills/run-system-analysis/reports/` with a timestamp in the filename.The objective of the report is to present all information possible to help the reader determine if the high BER is consistent on each system and determine if the high BER is consistent across all systems.
 
+Do this for both standard per-system data outlook and per-UBB outlook. There should be two excel reports: one looking at the per-system (default) and one looking at the per-UBB data (`--by-ubb-position`)
+
 ### Guidelines for Reporting
 
 - Make sure to include `info` and heatmap of the `stats` for `all` lanes in the report.
@@ -31,18 +33,3 @@ Use the `bh-analyze-systmes` tool to create a report targetting BER of 1e-6 or w
 - Include `histogram` and `advanced-stats` for all lanes that have 10 or greater occurrences of BER of 1e-6 or worse
   - The `histogram` and `advanced-stats` worksheets for a particular lane should be grouped together in the worksheet tab bar
 - Use the `advanced-stats` to find the hosts on with BER was 1e-6 or worse and include a `plot` for the lane on that system
-
-## Generate lane performance analysis summary
-
-After completing the Excel report, generate a comprehensive lane performance analysis markdown file:
-
-1. Query the database to analyze which lanes perform more poorly than others across all systems
-2. Create a markdown report with the same filename as the Excel report but with `.md` extension
-3. The analysis should include:
-   - Lane distribution of BER issues (percentage breakdown by lane)
-   - ETH port performance analysis
-   - Critical patterns (e.g., specific bus_id/ETH/lane combinations affecting multiple systems)
-   - Systematic vs isolated issues
-   - Top problematic combinations by occurrence
-   - Conclusions and recommendations for hardware/firmware teams
-4. Save the markdown file to `.claude/skills/run-system-analysis/reports/` with matching timestamp to the Excel report

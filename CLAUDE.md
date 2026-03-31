@@ -330,11 +330,21 @@ Database utility for aggregating and querying PRBS test data across multiple sys
   - Batch insertion into SQLite database
   - Records ingestion metadata for provenance
 
+- **`ubb_normalization.py`**: UBB position normalization utilities
+  - `normalize_bus_id_to_chip()`: Convert bus_id to chip position (U1-U8)
+  - `get_chip_position()`: Extract chip number from bus_id
+  - `get_ubb_number()`: Extract UBB number from bus_id
+  - `normalize_lane_id()`: Convert lane ID to chip position format
+  - `group_lane_ids_by_chip_position()`: Aggregate lanes by chip position
+  - `get_all_bus_ids_for_chip()`: Get all 4 bus_ids for a chip position
+
 - **`query_engine.py`**: Query interface with lane selection
   - `QueryEngine`: High-level query abstraction
-  - `LaneSelector`: Flexible lane specification (all/specific ports/wildcards)
+  - `LaneSelector`: Flexible lane specification (all/specific ports/wildcards/chip positions)
+    - Supports per-UBB normalization mode (treats 0x:00.0, 4x:00.0, cx:00.0, 8x:00.0 as equivalent)
+    - Chip position syntax (U1-U8) and traditional bus_id syntax
   - Query methods:
-    - `query_ber_statistics()`: Min/max/avg BER per lane
+    - `query_ber_statistics()`: Min/max/avg BER per lane (supports per-UBB aggregation)
     - `query_ber_threshold_exceeded()`: Count threshold violations
     - `query_custom_ber_threshold()`: Custom threshold analysis
     - `query_training_failures()`: Count training failures
@@ -390,6 +400,10 @@ bh-analyze-systems custom 01:00.0/* 1e-10
 bh-analyze-systems stats all --speed 200 --format heatmap --excel-output analysis.xlsx
 bh-analyze-systems histogram 01:00.0/ETH07/4 --speed 200 --excel-output analysis.xlsx
 
+# Per-UBB analysis (4x sample size, chip position normalization)
+bh-analyze-systems stats U1/ETH07 --speed 200 --by-ubb-position --format heatmap
+bh-analyze-systems stats 01:00.0/ETH07 --speed 200 --by-ubb-position  # Same as above
+
 # Interactive shell
 bh-analyze-systems shell
 ```
@@ -402,6 +416,13 @@ bh-analyze-systems shell
 - `bh-glx-c02u02/01:00.0/ETH07` - Specific system and port
 - `*/ETH07` - ETH07 on all systems
 - `*/ETH07/4` - Lane 4 on ETH07 across all systems
+
+**Per-UBB Mode (v0.7.0+):**
+Add `--by-ubb-position` flag to normalize by chip position (U1-U8):
+- `U1/ETH07` - Chip 1 on all UBBs (aggregates 01:00.0, 41:00.0, c1:00.0, 81:00.0)
+- `U1/ETH07/4` - Lane 4 on chip 1 across all UBBs
+- `01:00.0/ETH07 --by-ubb-position` - Same as U1/ETH07 (accepts bus_id format too)
+- `U*/*` - All chip positions, all ports (chip position wildcard)
 
 **Excel Export:**
 All analysis commands support `--excel-output FILE` option:

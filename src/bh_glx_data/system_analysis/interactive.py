@@ -139,17 +139,17 @@ class AnalysisShell:
         help_text = """
 Available commands:
 
-  stats <lane-spec> [--speed SPEED] [--format FORMAT] [--statistic STAT] [--excel-output FILE]
+  stats <lane-spec> [--speed SPEED] [--format FORMAT] [--statistic STAT] [--excel-output FILE] [-u|--by-ubb-position]
                                                - Show BER statistics
-  threshold <lane-spec> [--speed SPEED] [--format FORMAT] [--excel-output FILE]
+  threshold <lane-spec> [--speed SPEED] [--format FORMAT] [--excel-output FILE] [-u|--by-ubb-position]
                                                - Show BER threshold exceeded
-  custom <lane-spec> <threshold> [--speed SPEED] [--format FORMAT] [--excel-output FILE]
+  custom <lane-spec> <threshold> [--speed SPEED] [--format FORMAT] [--excel-output FILE] [-u|--by-ubb-position]
                                                - Show custom threshold counts
-  training <lane-spec> [--speed SPEED] [--format FORMAT] [--excel-output FILE]
+  training <lane-spec> [--speed SPEED] [--format FORMAT] [--excel-output FILE] [-u|--by-ubb-position]
                                                - Show training failures
-  histogram <lane-spec> [--speed SPEED] [--excel-output FILE]
+  histogram <lane-spec> [--speed SPEED] [--excel-output FILE] [-u|--by-ubb-position]
                                                - Show BER histogram
-  advanced-stats <lane-spec> [--speed SPEED] [--excel-output FILE]
+  advanced-stats <lane-spec> [--speed SPEED] [--excel-output FILE] [-u|--by-ubb-position]
                                                - Show aggregated host statistics
   systems                                      - List all systems
   speeds                                       - List all train speeds
@@ -172,16 +172,27 @@ Statistic options (for heatmap):
 Excel export:
   --excel-output FILE    - Export results to Excel file
 
+UBB normalization:
+  --by-ubb-position/-u   - Aggregate by chip position (U1-U8) instead of bus_id
+                           Combines data from all 4 UBBs for 4x sample size
+
 Lane specifications:
   all                      - All lanes on all systems
   01:00.0/ETH07           - Specific port (all lanes)
   01:00.0/*               - All ports on bus_id
   system/01:00.0/ETH07    - Specific system and port
 
+UBB mode lane specs (with --by-ubb-position):
+  U1/ETH07                - Chip position U1, ETH07 (all UBBs)
+  U1/ETH07/4              - Chip position U1, ETH07, lane 4
+  U1/*                    - All ports on chip position U1
+
 Examples:
   stats all --speed 200
   stats all --speed 200 --format heatmap --statistic avg
   stats all --excel-output analysis.xlsx
+  stats all --by-ubb-position
+  stats U1/ETH07 --by-ubb-position --format heatmap
   threshold 01:00.0/ETH07 --format heatmap --excel-output results.xlsx
   custom 01:00.0/* 1e-10 --speed 200
   training all --excel-output failures.xlsx
@@ -198,7 +209,7 @@ Examples:
             args: Command arguments
         """
         if not args:
-            print("Usage: stats <lane-spec> [--speed SPEED] [--format FORMAT] [--statistic STAT] [--excel-output FILE]")
+            print("Usage: stats <lane-spec> [--speed SPEED] [--format FORMAT] [--statistic STAT] [--excel-output FILE] [--by-ubb-position|-u]")
             return
 
         lane_spec = args[0]
@@ -206,9 +217,10 @@ Examples:
         output_format = self._parse_format(args[1:])
         statistic = self._parse_statistic(args[1:])
         excel_output = self._parse_excel_output(args[1:])
+        by_ubb_position = self._parse_by_ubb_position(args[1:])
 
         try:
-            selector = LaneSelector.from_spec(lane_spec)
+            selector = LaneSelector.from_spec(lane_spec, normalize_by_ubb=by_ubb_position)
             result = self.query_engine.query_ber_statistics(selector, train_speeds=speeds)
 
             self.last_result = result
@@ -244,16 +256,17 @@ Examples:
             args: Command arguments
         """
         if not args:
-            print("Usage: threshold <lane-spec> [--speed SPEED] [--format FORMAT] [--excel-output FILE]")
+            print("Usage: threshold <lane-spec> [--speed SPEED] [--format FORMAT] [--excel-output FILE] [--by-ubb-position|-u]")
             return
 
         lane_spec = args[0]
         speeds = self._parse_speeds(args[1:])
         output_format = self._parse_format(args[1:])
         excel_output = self._parse_excel_output(args[1:])
+        by_ubb_position = self._parse_by_ubb_position(args[1:])
 
         try:
-            selector = LaneSelector.from_spec(lane_spec)
+            selector = LaneSelector.from_spec(lane_spec, normalize_by_ubb=by_ubb_position)
             result = self.query_engine.query_ber_threshold_exceeded(selector, train_speeds=speeds)
 
             self.last_result = result
@@ -288,7 +301,7 @@ Examples:
             args: Command arguments
         """
         if len(args) < 2:
-            print("Usage: custom <lane-spec> <threshold> [--speed SPEED] [--format FORMAT] [--excel-output FILE]")
+            print("Usage: custom <lane-spec> <threshold> [--speed SPEED] [--format FORMAT] [--excel-output FILE] [--by-ubb-position|-u]")
             return
 
         lane_spec = args[0]
@@ -301,9 +314,10 @@ Examples:
         speeds = self._parse_speeds(args[2:])
         output_format = self._parse_format(args[2:])
         excel_output = self._parse_excel_output(args[2:])
+        by_ubb_position = self._parse_by_ubb_position(args[2:])
 
         try:
-            selector = LaneSelector.from_spec(lane_spec)
+            selector = LaneSelector.from_spec(lane_spec, normalize_by_ubb=by_ubb_position)
             result = self.query_engine.query_custom_ber_threshold(
                 selector, threshold, train_speeds=speeds
             )
@@ -340,16 +354,17 @@ Examples:
             args: Command arguments
         """
         if not args:
-            print("Usage: training <lane-spec> [--speed SPEED] [--format FORMAT] [--excel-output FILE]")
+            print("Usage: training <lane-spec> [--speed SPEED] [--format FORMAT] [--excel-output FILE] [--by-ubb-position|-u]")
             return
 
         lane_spec = args[0]
         speeds = self._parse_speeds(args[1:])
         output_format = self._parse_format(args[1:])
         excel_output = self._parse_excel_output(args[1:])
+        by_ubb_position = self._parse_by_ubb_position(args[1:])
 
         try:
-            selector = LaneSelector.from_spec(lane_spec)
+            selector = LaneSelector.from_spec(lane_spec, normalize_by_ubb=by_ubb_position)
             result = self.query_engine.query_training_failures(selector, train_speeds=speeds)
 
             self.last_result = result
@@ -384,15 +399,16 @@ Examples:
             args: Command arguments
         """
         if not args:
-            print("Usage: histogram <lane-spec> [--speed SPEED] [--excel-output FILE]")
+            print("Usage: histogram <lane-spec> [--speed SPEED] [--excel-output FILE] [--by-ubb-position|-u]")
             return
 
         lane_spec = args[0]
         speeds = self._parse_speeds(args[1:])
         excel_output = self._parse_excel_output(args[1:])
+        by_ubb_position = self._parse_by_ubb_position(args[1:])
 
         try:
-            selector = LaneSelector.from_spec(lane_spec)
+            selector = LaneSelector.from_spec(lane_spec, normalize_by_ubb=by_ubb_position)
             result = self.query_engine.query_ber_histogram(selector, train_speeds=speeds)
 
             self.last_result = result
@@ -422,15 +438,16 @@ Examples:
             args: Command arguments
         """
         if not args:
-            print("Usage: advanced-stats <lane-spec> [--speed SPEED] [--excel-output FILE]")
+            print("Usage: advanced-stats <lane-spec> [--speed SPEED] [--excel-output FILE] [--by-ubb-position|-u]")
             return
 
         lane_spec = args[0]
         speeds = self._parse_speeds(args[1:])
         excel_output = self._parse_excel_output(args[1:])
+        by_ubb_position = self._parse_by_ubb_position(args[1:])
 
         try:
-            selector = LaneSelector.from_spec(lane_spec)
+            selector = LaneSelector.from_spec(lane_spec, normalize_by_ubb=by_ubb_position)
             result = self.query_engine.query_aggregated_host_stats(selector, train_speeds=speeds)
 
             self.last_result = result
@@ -598,3 +615,14 @@ Examples:
             i += 1
 
         return None
+
+    def _parse_by_ubb_position(self, args: list) -> bool:
+        """Parse --by-ubb-position/-u flag from command args.
+
+        Args:
+            args: Command arguments
+
+        Returns:
+            True if flag is present, False otherwise
+        """
+        return "--by-ubb-position" in args or "-u" in args

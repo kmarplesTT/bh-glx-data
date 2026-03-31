@@ -472,6 +472,7 @@ The `bh-analyze-systems` tool aggregates PRBS test data across multiple systems 
 
 - SQLite database with efficient indexing
 - Flexible lane selection (wildcards, specific ports, individual lanes)
+- **Per-UBB analysis mode** - Normalize by chip position (U1-U8) for 4x sample size and PCB-level pattern detection
 - BER statistics, threshold analysis, training failure tracking
 - Histogram and advanced statistics analysis
 - Terminal heatmaps with color coding
@@ -492,6 +493,9 @@ bh-analyze-systems stats all --speed 200 --format heatmap --excel-output analysi
 
 # Histogram analysis with Excel chart
 bh-analyze-systems histogram 01:00.0/ETH07/4 --speed 200 --excel-output histogram.xlsx
+
+# Per-UBB analysis (4x sample size, chip position normalization)
+bh-analyze-systems stats U1/ETH07 --speed 200 --by-ubb-position --format heatmap
 
 # Interactive shell
 bh-analyze-systems shell

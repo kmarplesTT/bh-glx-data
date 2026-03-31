@@ -340,3 +340,100 @@ class TestLaneSelectorSpecRebuilding:
                 f"Spec rebuilding changed semantics for '{original_spec}': "
                 f"original={original_sql}, rebuilt={rebuilt_sql}"
             )
+
+
+class TestLaneSelectorUBBMode:
+    """Tests for LaneSelector with UBB normalization mode."""
+
+    def test_from_spec_with_normalize_by_ubb_flag(self):
+        """Test that normalize_by_ubb flag is stored correctly."""
+        selector = LaneSelector.from_spec("all", normalize_by_ubb=True)
+        assert selector.normalize_by_ubb is True
+
+        selector_normal = LaneSelector.from_spec("all", normalize_by_ubb=False)
+        assert selector_normal.normalize_by_ubb is False
+
+    def test_from_spec_chip_position_U1(self):
+        """Test parsing chip position U1 with UBB mode."""
+        selector = LaneSelector.from_spec("U1/ETH07", normalize_by_ubb=True)
+
+        assert selector.normalize_by_ubb is True
+        assert selector.bus_id == "U1"
+        assert selector.eth_id == "ETH07"
+
+    def test_from_spec_chip_position_U5(self):
+        """Test parsing chip position U5 with UBB mode."""
+        selector = LaneSelector.from_spec("U5/ETH10", normalize_by_ubb=True)
+
+        assert selector.normalize_by_ubb is True
+        assert selector.bus_id == "U5"
+        assert selector.eth_id == "ETH10"
+
+    def test_from_spec_chip_position_with_lane(self):
+        """Test parsing chip position with lane number."""
+        selector = LaneSelector.from_spec("U1/ETH07/4", normalize_by_ubb=True)
+
+        assert selector.normalize_by_ubb is True
+        assert selector.bus_id == "U1"
+        assert selector.eth_id == "ETH07"
+        assert selector.lane_num == 4
+
+    def test_from_spec_chip_position_wildcard_eth(self):
+        """Test parsing chip position with wildcard eth."""
+        selector = LaneSelector.from_spec("U1/*", normalize_by_ubb=True)
+
+        assert selector.normalize_by_ubb is True
+        assert selector.bus_id == "U1"
+        assert selector.eth_id is None
+
+    def test_to_sql_filter_ubb_mode_all(self):
+        """Test SQL filter for 'all' in UBB mode."""
+        selector = LaneSelector.from_spec("all", normalize_by_ubb=True)
+        where_clause, params = selector.to_sql_filter()
+
+        # Should not filter by bus_id
+        assert where_clause == "1=1"
+        assert params == ()
+
+    def test_to_sql_filter_ubb_mode_specific_chip(self):
+        """Test SQL filter for specific chip position in UBB mode."""
+        selector = LaneSelector.from_spec("U1/ETH07", normalize_by_ubb=True)
+        where_clause, params = selector.to_sql_filter()
+
+        # Should filter by all 4 bus_ids for U1
+        assert "bus_id IN" in where_clause
+        assert "01:00.0" in params
+        assert "41:00.0" in params
+        assert "c1:00.0" in params
+        assert "81:00.0" in params
+        assert "ETH07" in params
+
+    def test_to_sql_filter_ubb_mode_chip_U5(self):
+        """Test SQL filter for chip position U5 in UBB mode."""
+        selector = LaneSelector.from_spec("U5/ETH10", normalize_by_ubb=True)
+        where_clause, params = selector.to_sql_filter()
+
+        # Should filter by all 4 bus_ids for U5
+        assert "bus_id IN" in where_clause
+        assert "05:00.0" in params
+        assert "45:00.0" in params
+        assert "c5:00.0" in params
+        assert "85:00.0" in params
+
+    def test_from_spec_bus_id_in_ubb_mode_normalizes(self):
+        """Test that regular bus_id in UBB mode still works."""
+        selector = LaneSelector.from_spec("01:00.0/ETH07", normalize_by_ubb=True)
+
+        # Should store normalized bus_id
+        assert selector.normalize_by_ubb is True
+        assert selector.bus_id == "01:00.0"
+        assert selector.eth_id == "ETH07"
+
+    def test_to_sql_filter_normal_bus_id_in_ubb_mode(self):
+        """Test SQL filter for normal bus_id with UBB mode flag."""
+        selector = LaneSelector.from_spec("01:00.0/ETH07", normalize_by_ubb=True)
+        where_clause, params = selector.to_sql_filter()
+
+        # Should filter by single bus_id (not expand to all 4)
+        assert "bus_id = ?" in where_clause
+        assert params == ("01:00.0", "ETH07")

@@ -135,6 +135,14 @@ Lane Specifications:
         metavar="FILE",
         help="Export results to Excel file (creates new file or adds worksheet to existing)",
     )
+    stats_parser.add_argument(
+        "--by-ubb-position",
+        "-u",
+        action="store_true",
+        dest="by_ubb_position",
+        help="Aggregate data by UBB chip position (U1-U8) instead of bus_id. "
+             "Combines data from equivalent positions across all 4 UBBs.",
+    )
 
     # Threshold command
     threshold_parser = subparsers.add_parser(
@@ -165,6 +173,14 @@ Lane Specifications:
         metavar="FILE",
         help="Export results to Excel file (creates new file or adds worksheet to existing)",
     )
+    threshold_parser.add_argument(
+        "--by-ubb-position",
+        "-u",
+        action="store_true",
+        dest="by_ubb_position",
+        help="Aggregate data by UBB chip position (U1-U8) instead of bus_id. "
+             "Combines data from equivalent positions across all 4 UBBs.",
+    )
 
     # Custom threshold command
     custom_parser = subparsers.add_parser("custom", help="Show custom BER threshold counts")
@@ -194,6 +210,14 @@ Lane Specifications:
         metavar="FILE",
         help="Export results to Excel file (creates new file or adds worksheet to existing)",
     )
+    custom_parser.add_argument(
+        "--by-ubb-position",
+        "-u",
+        action="store_true",
+        dest="by_ubb_position",
+        help="Aggregate data by UBB chip position (U1-U8) instead of bus_id. "
+             "Combines data from equivalent positions across all 4 UBBs.",
+    )
 
     # Training failures command
     training_parser = subparsers.add_parser("training", help="Show training failure counts")
@@ -222,6 +246,14 @@ Lane Specifications:
         metavar="FILE",
         help="Export results to Excel file (creates new file or adds worksheet to existing)",
     )
+    training_parser.add_argument(
+        "--by-ubb-position",
+        "-u",
+        action="store_true",
+        dest="by_ubb_position",
+        help="Aggregate data by UBB chip position (U1-U8) instead of bus_id. "
+             "Combines data from equivalent positions across all 4 UBBs.",
+    )
 
     # Histogram command
     histogram_parser = subparsers.add_parser("histogram", help="Show BER histogram for lane(s)")
@@ -248,6 +280,14 @@ Lane Specifications:
         type=Path,
         metavar="FILE",
         help="Export results to Excel file (creates new file or adds worksheet to existing)",
+    )
+    histogram_parser.add_argument(
+        "--by-ubb-position",
+        "-u",
+        action="store_true",
+        dest="by_ubb_position",
+        help="Aggregate data by UBB chip position (U1-U8) instead of bus_id. "
+             "Combines data from equivalent positions across all 4 UBBs.",
     )
 
     # Advanced stats command
@@ -277,6 +317,14 @@ Lane Specifications:
         type=Path,
         metavar="FILE",
         help="Export results to Excel file (creates new file or adds worksheet to existing)",
+    )
+    advanced_stats_parser.add_argument(
+        "--by-ubb-position",
+        "-u",
+        action="store_true",
+        dest="by_ubb_position",
+        help="Aggregate data by UBB chip position (U1-U8) instead of bus_id. "
+             "Combines data from equivalent positions across all 4 UBBs.",
     )
 
     # Plot command
@@ -379,7 +427,8 @@ def handle_stats(db: DatabaseManager, args: argparse.Namespace) -> int:
         Exit code (0 for success, 1 for error)
     """
     try:
-        selector = LaneSelector.from_spec(args.lane_spec)
+        by_ubb_position = getattr(args, "by_ubb_position", False)
+        selector = LaneSelector.from_spec(args.lane_spec, normalize_by_ubb=by_ubb_position)
         engine = QueryEngine(db)
 
         result = engine.query_ber_statistics(
@@ -440,7 +489,8 @@ def handle_threshold(db: DatabaseManager, args: argparse.Namespace) -> int:
         Exit code (0 for success, 1 for error)
     """
     try:
-        selector = LaneSelector.from_spec(args.lane_spec)
+        by_ubb_position = getattr(args, "by_ubb_position", False)
+        selector = LaneSelector.from_spec(args.lane_spec, normalize_by_ubb=by_ubb_position)
         engine = QueryEngine(db)
 
         result = engine.query_ber_threshold_exceeded(selector, train_speeds=args.speeds)
@@ -497,7 +547,8 @@ def handle_custom(db: DatabaseManager, args: argparse.Namespace) -> int:
         Exit code (0 for success, 1 for error)
     """
     try:
-        selector = LaneSelector.from_spec(args.lane_spec)
+        by_ubb_position = getattr(args, "by_ubb_position", False)
+        selector = LaneSelector.from_spec(args.lane_spec, normalize_by_ubb=by_ubb_position)
         engine = QueryEngine(db)
 
         result = engine.query_custom_ber_threshold(
@@ -558,7 +609,8 @@ def handle_training(db: DatabaseManager, args: argparse.Namespace) -> int:
         Exit code (0 for success, 1 for error)
     """
     try:
-        selector = LaneSelector.from_spec(args.lane_spec)
+        by_ubb_position = getattr(args, "by_ubb_position", False)
+        selector = LaneSelector.from_spec(args.lane_spec, normalize_by_ubb=by_ubb_position)
         engine = QueryEngine(db)
 
         result = engine.query_training_failures(selector, train_speeds=args.speeds)
@@ -615,7 +667,8 @@ def handle_histogram(db: DatabaseManager, args: argparse.Namespace) -> int:
         Exit code (0 for success, 1 for error)
     """
     try:
-        selector = LaneSelector.from_spec(args.lane_spec)
+        by_ubb_position = getattr(args, "by_ubb_position", False)
+        selector = LaneSelector.from_spec(args.lane_spec, normalize_by_ubb=by_ubb_position)
         engine = QueryEngine(db)
 
         result = engine.query_ber_histogram(selector, train_speeds=args.speeds)
@@ -663,7 +716,8 @@ def handle_advanced_stats(db: DatabaseManager, args: argparse.Namespace) -> int:
         Exit code (0 for success, 1 for error)
     """
     try:
-        selector = LaneSelector.from_spec(args.lane_spec)
+        by_ubb_position = getattr(args, "by_ubb_position", False)
+        selector = LaneSelector.from_spec(args.lane_spec, normalize_by_ubb=by_ubb_position)
         engine = QueryEngine(db)
 
         result = engine.query_aggregated_host_stats(selector, train_speeds=args.speeds)
