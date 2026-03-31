@@ -240,6 +240,7 @@ class LaneSelector:
         bus_id: Bus ID filter (None = all, "*" = wildcard, specific bus_id)
         eth_id: Ethernet port filter (None = all, "*" = wildcard, specific eth_id)
         lane_num: Lane number filter (None = all lanes, 0-7 = specific lane)
+        normalize_by_ubb: If True, aggregate data by chip position (U1-U8)
     """
 
     def __init__(
@@ -248,6 +249,7 @@ class LaneSelector:
         bus_id: Optional[str] = None,
         eth_id: Optional[str] = None,
         lane_num: Optional[int] = None,
+        normalize_by_ubb: bool = False,
     ):
         """Initialize lane selector.
 
@@ -256,11 +258,13 @@ class LaneSelector:
             bus_id: Bus ID filter pattern
             eth_id: Ethernet port filter pattern
             lane_num: Lane number (0-7) or None for all lanes
+            normalize_by_ubb: If True, aggregate by chip position instead of bus_id
         """
         self.host = host
         self.bus_id = bus_id
         self.eth_id = eth_id
         self.lane_num = lane_num
+        self.normalize_by_ubb = normalize_by_ubb
         self.spec = self._build_spec()
 
     def _build_spec(self) -> str:
@@ -307,11 +311,12 @@ class LaneSelector:
         return spec
 
     @classmethod
-    def from_spec(cls, spec: str) -> "LaneSelector":
+    def from_spec(cls, spec: str, normalize_by_ubb: bool = False) -> "LaneSelector":
         """Parse lane specification string.
 
         Args:
             spec: Lane specification string
+            normalize_by_ubb: If True, enable UBB normalization mode
 
         Returns:
             LaneSelector instance
@@ -329,6 +334,11 @@ class LaneSelector:
             "bh-glx-c02u02/*" -> All ports on system
             "*/ETH07" -> ETH07 on all systems
             "*/ETH07/4" -> Lane 4 on ETH07 across all systems
+
+        UBB Normalization Mode Examples (normalize_by_ubb=True):
+            "U1/ETH07" -> Chip position U1, ETH07 (all UBBs)
+            "U1/ETH07/4" -> Chip position U1, ETH07, lane 4
+            "U1/*" -> All ports on chip position U1
         """
         spec = spec.strip()
 
@@ -338,7 +348,7 @@ class LaneSelector:
 
         # Handle "all" special case
         if spec.lower() == "all":
-            return cls(host=None, bus_id=None, eth_id=None, lane_num=None)
+            return cls(host=None, bus_id=None, eth_id=None, lane_num=None, normalize_by_ubb=normalize_by_ubb)
 
         # Split by "/" and validate
         parts = spec.split("/")
@@ -373,17 +383,29 @@ class LaneSelector:
                 parts = parts[:-1]  # Remove lane number from parts
 
         if len(parts) == 1:
-            # Single part must be a valid bus_id (not hostname alone)
+            # Single part must be a valid bus_id or chip position (not hostname alone)
             part = parts[0]
 
             # Wildcard-only is invalid
             if part == "*":
                 raise LaneSelectorError("Wildcard-only specification is invalid. Use 'all' instead.", spec=spec)
 
+            # In UBB mode, check if it's a chip position spec (U1-U8)
+            if normalize_by_ubb and part.startswith("U"):
+                from bh_glx_data.system_analysis.ubb_normalization import parse_chip_position_spec
+                try:
+                    # Validate chip position format
+                    parse_chip_position_spec(part)
+                    # Store as bus_id for internal use - will be handled in to_sql_filter
+                    return cls(host=None, bus_id=part, eth_id=None, lane_num=lane_num, normalize_by_ubb=normalize_by_ubb)
+                except ValueError as e:
+                    # Not a valid chip position, try as bus_id below
+                    pass
+
             # Try to parse as bus_id
             try:
                 normalized_bus_id = normalize_bus_id(part)
-                return cls(host=None, bus_id=normalized_bus_id, eth_id=None, lane_num=lane_num)
+                return cls(host=None, bus_id=normalized_bus_id, eth_id=None, lane_num=lane_num, normalize_by_ubb=normalize_by_ubb)
             except ValueError as e:
                 # Not a valid bus_id format
                 raise LaneSelectorError(
@@ -394,6 +416,7 @@ class LaneSelector:
 
         elif len(parts) == 2:
             # Could be bus_id/eth_id, host/bus_id, host/eth_id, or */eth_id
+            # In UBB mode: could also be U1/eth_id or U1/*
             first, second = parts
 
             # Handle */eth_id case
@@ -402,9 +425,27 @@ class LaneSelector:
                     raise LaneSelectorError("Invalid specification: */* is ambiguous. Use 'all' instead.", spec=spec)
                 try:
                     normalized_eth_id = normalize_eth_port(second)
-                    return cls(host=None, bus_id=None, eth_id=normalized_eth_id, lane_num=lane_num)
+                    return cls(host=None, bus_id=None, eth_id=normalized_eth_id, lane_num=lane_num, normalize_by_ubb=normalize_by_ubb)
                 except Exception as e:
                     raise LaneSelectorError(f"Invalid eth_id format: {second}", spec=spec) from e
+
+            # In UBB mode, check if first is a chip position (U1-U8)
+            if normalize_by_ubb and first.startswith("U"):
+                from bh_glx_data.system_analysis.ubb_normalization import parse_chip_position_spec
+                try:
+                    parse_chip_position_spec(first)
+                    # Normalize eth_id if not wildcard
+                    if second != "*":
+                        try:
+                            normalized_eth_id = normalize_eth_port(second)
+                        except Exception as e:
+                            raise LaneSelectorError(f"Invalid eth_id format: {second}", spec=spec) from e
+                    else:
+                        normalized_eth_id = None
+                    return cls(host=None, bus_id=first, eth_id=normalized_eth_id, lane_num=lane_num, normalize_by_ubb=normalize_by_ubb)
+                except ValueError:
+                    # Not a valid chip position, continue with normal parsing
+                    pass
 
             # If first contains ":", it's definitely bus_id/eth_id
             if ":" in first:
@@ -422,13 +463,13 @@ class LaneSelector:
                 else:
                     normalized_eth_id = None
 
-                return cls(host=None, bus_id=normalized_bus_id, eth_id=normalized_eth_id, lane_num=lane_num)
+                return cls(host=None, bus_id=normalized_bus_id, eth_id=normalized_eth_id, lane_num=lane_num, normalize_by_ubb=normalize_by_ubb)
 
             # If second contains ":", it's host/bus_id
             if ":" in second:
                 try:
                     normalized_bus_id = normalize_bus_id(second)
-                    return cls(host=first, bus_id=normalized_bus_id, eth_id=None, lane_num=lane_num)
+                    return cls(host=first, bus_id=normalized_bus_id, eth_id=None, lane_num=lane_num, normalize_by_ubb=normalize_by_ubb)
                 except Exception as e:
                     raise LaneSelectorError(f"Invalid bus_id format: {second}", spec=spec) from e
 
@@ -440,16 +481,16 @@ class LaneSelector:
                 # Try bus_id first
                 try:
                     normalized_bus_id = normalize_bus_id(first)
-                    return cls(host=None, bus_id=normalized_bus_id, eth_id=None, lane_num=lane_num)
+                    return cls(host=None, bus_id=normalized_bus_id, eth_id=None, lane_num=lane_num, normalize_by_ubb=normalize_by_ubb)
                 except ValueError:
                     # Not a valid bus_id, treat as host/*
-                    return cls(host=first, bus_id=None, eth_id=None, lane_num=lane_num)
+                    return cls(host=first, bus_id=None, eth_id=None, lane_num=lane_num, normalize_by_ubb=normalize_by_ubb)
             else:
                 # second is a specific eth_id, so first must be a valid bus_id
                 try:
                     normalized_bus_id = normalize_bus_id(first)
                     normalized_eth_id = normalize_eth_port(second)
-                    return cls(host=None, bus_id=normalized_bus_id, eth_id=normalized_eth_id, lane_num=lane_num)
+                    return cls(host=None, bus_id=normalized_bus_id, eth_id=normalized_eth_id, lane_num=lane_num, normalize_by_ubb=normalize_by_ubb)
                 except ValueError as e:
                     raise LaneSelectorError(
                         f"Invalid bus_id format: {first}. For hostname patterns, use 'host/*' format.",
@@ -480,7 +521,7 @@ class LaneSelector:
             else:
                 normalized_eth_id = None
 
-            return cls(host=host if host != "*" else None, bus_id=normalized_bus_id, eth_id=normalized_eth_id, lane_num=lane_num)
+            return cls(host=host if host != "*" else None, bus_id=normalized_bus_id, eth_id=normalized_eth_id, lane_num=lane_num, normalize_by_ubb=normalize_by_ubb)
 
         elif len(parts) == 4:
             # This case is already handled by lane number extraction above
@@ -497,11 +538,18 @@ class LaneSelector:
         column-level filtering (selecting specific acc_ber_lane# columns).
         Use get_lane_columns() to determine which columns to query.
 
+        In UBB normalization mode, if a chip position is specified (U1-U8),
+        expands to filter by all 4 corresponding bus_ids.
+
         Returns:
             Tuple of (where_clause, params) for parameterized query
 
         Example:
             ("bus_id = ? AND eth_id = ?", ("01:00.0", "ETH07"))
+
+        Example (UBB mode with U1):
+            ("bus_id IN (?, ?, ?, ?) AND eth_id = ?",
+             ("01:00.0", "41:00.0", "c1:00.0", "81:00.0", "ETH07"))
         """
         conditions = []
         params = []
@@ -513,8 +561,25 @@ class LaneSelector:
 
         # Bus ID filter
         if self.bus_id and self.bus_id != "*":
-            conditions.append("bus_id = ?")
-            params.append(self.bus_id)
+            # In UBB mode, check if bus_id is a chip position spec
+            if self.normalize_by_ubb and self.bus_id.startswith("U"):
+                from bh_glx_data.system_analysis.ubb_normalization import (
+                    get_all_bus_ids_for_chip,
+                    parse_chip_position_spec,
+                )
+                try:
+                    chip_pos = parse_chip_position_spec(self.bus_id)
+                    bus_ids = get_all_bus_ids_for_chip(chip_pos)
+                    placeholders = ", ".join(["?" for _ in bus_ids])
+                    conditions.append(f"bus_id IN ({placeholders})")
+                    params.extend(bus_ids)
+                except ValueError:
+                    # Not a valid chip position, treat as normal bus_id
+                    conditions.append("bus_id = ?")
+                    params.append(self.bus_id)
+            else:
+                conditions.append("bus_id = ?")
+                params.append(self.bus_id)
 
         # Eth ID filter
         if self.eth_id and self.eth_id != "*":
@@ -600,6 +665,34 @@ class QueryEngine:
         """
         self.db = db_manager
 
+    def _aggregate_by_chip_position(
+        self, df: pd.DataFrame, lane_col: str
+    ) -> Dict[str, pd.Series]:
+        """Group DataFrame by chip position instead of bus_id.
+
+        Args:
+            df: DataFrame with bus_id, eth_id columns
+            lane_col: Lane column name to extract values from
+
+        Returns:
+            Dictionary mapping normalized lane_id to series of values
+            e.g., {"U1/ETH07/lane0": Series([...]), ...}
+        """
+        from bh_glx_data.system_analysis.ubb_normalization import normalize_bus_id_to_chip
+
+        # Add chip_position column
+        df = df.copy()
+        df["chip_position"] = df["bus_id"].apply(normalize_bus_id_to_chip)
+
+        # Group by chip_position and eth_id
+        grouped_values = {}
+        for (chip_pos, eth_id), group in df.groupby(["chip_position", "eth_id"]):
+            lane_num = int(lane_col.replace("acc_ber_lane", ""))
+            lane_id = f"{chip_pos}/{eth_id}/lane{lane_num}"
+            grouped_values[lane_id] = group[lane_col].dropna()
+
+        return grouped_values
+
     def query_ber_statistics(
         self,
         lane_selector: LaneSelector,
@@ -609,6 +702,9 @@ class QueryEngine:
 
         Training failures are always excluded from BER statistics since they
         do not have valid BER data.
+
+        If lane_selector.normalize_by_ubb is True, aggregates data by chip
+        position (U1-U8) instead of individual bus_ids.
 
         Args:
             lane_selector: Specifies which lanes to analyze
@@ -648,21 +744,24 @@ class QueryEngine:
                 )
 
             # Calculate statistics per lane
-            lane_stats_dict = calculate_lane_statistics(df, self.LANE_COLUMNS)
-
-            # Convert to LaneBERStats objects with full lane IDs
             lane_stats = {}
-            for lane_col, stats in lane_stats_dict.items():
-                # Extract lane number from column name
+
+            for lane_col in self.LANE_COLUMNS:
                 lane_num = int(lane_col.replace("acc_ber_lane", ""))
 
-                # Build lane IDs for each unique bus_id/eth_id combination
-                for (bus_id, eth_id), group in df.groupby(["bus_id", "eth_id"]):
-                    lane_id = f"{bus_id}/{eth_id}/lane{lane_num}"
+                # Group by chip position or bus_id depending on mode
+                if lane_selector.normalize_by_ubb:
+                    # UBB normalization mode: group by chip_position
+                    grouped_values = self._aggregate_by_chip_position(df, lane_col)
+                else:
+                    # Normal mode: group by bus_id
+                    grouped_values = {}
+                    for (bus_id, eth_id), group in df.groupby(["bus_id", "eth_id"]):
+                        lane_id = f"{bus_id}/{eth_id}/lane{lane_num}"
+                        grouped_values[lane_id] = group[lane_col].dropna()
 
-                    # Calculate stats for this specific lane
-                    lane_values = group[lane_col].dropna()
-
+                # Calculate stats for each grouped lane
+                for lane_id, lane_values in grouped_values.items():
                     if not lane_values.empty:
                         # Separate high BER values (>= 0.1) from normal values
                         high_ber_mask = lane_values >= 0.1
@@ -713,6 +812,9 @@ class QueryEngine:
     ) -> ThresholdExceededCounts:
         """Count BER_THRESHOLD_EXCEEDED occurrences per lane.
 
+        If lane_selector.normalize_by_ubb is True, aggregates counts by chip
+        position (U1-U8) instead of individual bus_ids.
+
         Args:
             lane_selector: Specifies which lanes to analyze
             train_speeds: Filter by specific speeds (None = all)
@@ -724,17 +826,17 @@ class QueryEngine:
             QueryError: If query execution fails
         """
         try:
-            # Build query
+            # Build query - get all data (not just threshold exceeded)
             where_clause, params = lane_selector.to_sql_filter()
-
-            # Filter by status
-            where_clause += " AND test_status = 'BER_THRESHOLD_EXCEEDED'"
 
             # Add speed filter
             if train_speeds:
                 speed_placeholders = ", ".join(["?" for _ in train_speeds])
                 where_clause += f" AND train_speed IN ({speed_placeholders})"
                 params = params + tuple(train_speeds)
+
+            # Exclude training failures (no BER data)
+            where_clause += " AND test_status != 'TRAINING_FAIL'"
 
             query = f"SELECT * FROM prbs_tests WHERE {where_clause}"
 
@@ -743,7 +845,7 @@ class QueryEngine:
 
             if df.empty:
                 logger.warning(
-                    f"No BER_THRESHOLD_EXCEEDED data found for lane selector: {lane_selector}"
+                    f"No data found for lane selector: {lane_selector}"
                 )
                 return ThresholdExceededCounts(
                     lane_counts={},
@@ -752,25 +854,41 @@ class QueryEngine:
                     train_speeds=train_speeds or [],
                 )
 
-            # Count by lane
-            lane_counts_dict = count_by_status(df, "BER_THRESHOLD_EXCEEDED", self.LANE_COLUMNS)
-
-            # Build full lane IDs
+            # Build full lane IDs and count threshold exceeded events
             lane_counts = {}
-            for lane_col, count in lane_counts_dict.items():
+            for lane_col in self.LANE_COLUMNS:
                 lane_num = int(lane_col.replace("acc_ber_lane", ""))
 
-                # Build lane IDs for each unique bus_id/eth_id
-                for (bus_id, eth_id), group in df.groupby(["bus_id", "eth_id"]):
-                    lane_id = f"{bus_id}/{eth_id}/lane{lane_num}"
+                # Group by chip position or bus_id depending on mode
+                if lane_selector.normalize_by_ubb:
+                    from bh_glx_data.system_analysis.ubb_normalization import (
+                        normalize_bus_id_to_chip,
+                    )
 
-                    # Count non-null values for this specific lane
-                    lane_count = group[lane_col].notna().sum()
-                    if lane_count > 0:
-                        lane_counts[lane_id] = int(lane_count)
+                    df_copy = df.copy()
+                    df_copy["chip_position"] = df_copy["bus_id"].apply(normalize_bus_id_to_chip)
 
-            # Metadata
-            num_tests = len(df)
+                    for (chip_pos, eth_id), group in df_copy.groupby(["chip_position", "eth_id"]):
+                        lane_id = f"{chip_pos}/{eth_id}/lane{lane_num}"
+                        # Count only BER_THRESHOLD_EXCEEDED events, but include all lanes with data
+                        lane_data = group[lane_col].dropna()
+                        if not lane_data.empty:
+                            threshold_exceeded_group = group[group["test_status"] == "BER_THRESHOLD_EXCEEDED"]
+                            lane_count = threshold_exceeded_group[lane_col].notna().sum()
+                            lane_counts[lane_id] = int(lane_count)
+                else:
+                    for (bus_id, eth_id), group in df.groupby(["bus_id", "eth_id"]):
+                        lane_id = f"{bus_id}/{eth_id}/lane{lane_num}"
+                        # Count only BER_THRESHOLD_EXCEEDED events, but include all lanes with data
+                        lane_data = group[lane_col].dropna()
+                        if not lane_data.empty:
+                            threshold_exceeded_group = group[group["test_status"] == "BER_THRESHOLD_EXCEEDED"]
+                            lane_count = threshold_exceeded_group[lane_col].notna().sum()
+                            lane_counts[lane_id] = int(lane_count)
+
+            # Metadata - count only threshold exceeded tests for backward compatibility
+            threshold_exceeded_df = df[df["test_status"] == "BER_THRESHOLD_EXCEEDED"]
+            num_tests = len(threshold_exceeded_df)
             num_systems = df["host"].nunique()
             speeds = sorted(df["train_speed"].unique().tolist())
 
@@ -793,6 +911,9 @@ class QueryEngine:
         train_speeds: Optional[List[int]] = None,
     ) -> CustomThresholdCounts:
         """Count occurrences where acc_ber_lane# > threshold.
+
+        If lane_selector.normalize_by_ubb is True, aggregates counts by chip
+        position (U1-U8) instead of individual bus_ids.
 
         Args:
             lane_selector: Specifies which lanes to analyze
@@ -833,22 +954,35 @@ class QueryEngine:
                     train_speeds=train_speeds or [],
                 )
 
-            # Count by threshold
-            lane_counts_dict = count_by_threshold(df, threshold, self.LANE_COLUMNS)
-
-            # Build full lane IDs
+            # Build full lane IDs and count
             lane_counts = {}
-            for lane_col, count in lane_counts_dict.items():
+            for lane_col in self.LANE_COLUMNS:
                 lane_num = int(lane_col.replace("acc_ber_lane", ""))
 
-                # Build lane IDs for each unique bus_id/eth_id
-                for (bus_id, eth_id), group in df.groupby(["bus_id", "eth_id"]):
-                    lane_id = f"{bus_id}/{eth_id}/lane{lane_num}"
+                # Group by chip position or bus_id depending on mode
+                if lane_selector.normalize_by_ubb:
+                    from bh_glx_data.system_analysis.ubb_normalization import (
+                        normalize_bus_id_to_chip,
+                    )
 
-                    # Count values exceeding threshold
-                    lane_count = (group[lane_col] > threshold).sum()
-                    if lane_count > 0:
-                        lane_counts[lane_id] = int(lane_count)
+                    df_copy = df.copy()
+                    df_copy["chip_position"] = df_copy["bus_id"].apply(normalize_bus_id_to_chip)
+
+                    for (chip_pos, eth_id), group in df_copy.groupby(["chip_position", "eth_id"]):
+                        lane_id = f"{chip_pos}/{eth_id}/lane{lane_num}"
+                        # Count violations and include all lanes with data (even if count is 0)
+                        lane_data = group[lane_col].dropna()
+                        if not lane_data.empty:
+                            lane_count = (lane_data > threshold).sum()
+                            lane_counts[lane_id] = int(lane_count)
+                else:
+                    for (bus_id, eth_id), group in df.groupby(["bus_id", "eth_id"]):
+                        lane_id = f"{bus_id}/{eth_id}/lane{lane_num}"
+                        # Count violations and include all lanes with data (even if count is 0)
+                        lane_data = group[lane_col].dropna()
+                        if not lane_data.empty:
+                            lane_count = (lane_data > threshold).sum()
+                            lane_counts[lane_id] = int(lane_count)
 
             # Metadata
             num_tests = len(df)
@@ -875,6 +1009,9 @@ class QueryEngine:
     ) -> TrainingFailureCounts:
         """Count TRAINING_FAIL occurrences per lane.
 
+        If lane_selector.normalize_by_ubb is True, aggregates counts by chip
+        position (U1-U8) instead of individual bus_ids.
+
         Args:
             lane_selector: Specifies which lanes to analyze
             train_speeds: Filter by specific speeds (None = all)
@@ -886,11 +1023,8 @@ class QueryEngine:
             QueryError: If query execution fails
         """
         try:
-            # Build query
+            # Build query - get all data
             where_clause, params = lane_selector.to_sql_filter()
-
-            # Filter by status
-            where_clause += " AND test_status = 'TRAINING_FAIL'"
 
             # Add speed filter
             if train_speeds:
@@ -904,7 +1038,7 @@ class QueryEngine:
             df = self.db.execute_query(query, params)
 
             if df.empty:
-                logger.warning(f"No TRAINING_FAIL data found for lane selector: {lane_selector}")
+                logger.warning(f"No data found for lane selector: {lane_selector}")
                 return TrainingFailureCounts(
                     lane_counts={},
                     num_tests=0,
@@ -912,26 +1046,39 @@ class QueryEngine:
                     train_speeds=train_speeds or [],
                 )
 
-            # Count by lane
-            lane_counts_dict = count_by_status(df, "TRAINING_FAIL", self.LANE_COLUMNS)
-
-            # Build full lane IDs
+            # Build full lane IDs and count training failures
             lane_counts = {}
-            for lane_col, count in lane_counts_dict.items():
+            for lane_col in self.LANE_COLUMNS:
                 lane_num = int(lane_col.replace("acc_ber_lane", ""))
 
-                # Build lane IDs for each unique bus_id/eth_id
-                for (bus_id, eth_id), group in df.groupby(["bus_id", "eth_id"]):
-                    lane_id = f"{bus_id}/{eth_id}/lane{lane_num}"
+                # Group by chip position or bus_id depending on mode
+                if lane_selector.normalize_by_ubb:
+                    from bh_glx_data.system_analysis.ubb_normalization import (
+                        normalize_bus_id_to_chip,
+                    )
 
-                    # Count non-null values (training failures still have lane markers)
-                    # We count all rows since they're already filtered to TRAINING_FAIL
-                    lane_count = len(group)
-                    if lane_count > 0:
-                        lane_counts[lane_id] = int(lane_count)
+                    df_copy = df.copy()
+                    df_copy["chip_position"] = df_copy["bus_id"].apply(normalize_bus_id_to_chip)
 
-            # Metadata
-            num_tests = len(df)
+                    for (chip_pos, eth_id), group in df_copy.groupby(["chip_position", "eth_id"]):
+                        lane_id = f"{chip_pos}/{eth_id}/lane{lane_num}"
+                        # Count only TRAINING_FAIL events for this port, but include all ports with data
+                        if len(group) > 0:
+                            training_fail_group = group[group["test_status"] == "TRAINING_FAIL"]
+                            lane_count = len(training_fail_group)
+                            lane_counts[lane_id] = int(lane_count)
+                else:
+                    for (bus_id, eth_id), group in df.groupby(["bus_id", "eth_id"]):
+                        lane_id = f"{bus_id}/{eth_id}/lane{lane_num}"
+                        # Count only TRAINING_FAIL events for this port, but include all ports with data
+                        if len(group) > 0:
+                            training_fail_group = group[group["test_status"] == "TRAINING_FAIL"]
+                            lane_count = len(training_fail_group)
+                            lane_counts[lane_id] = int(lane_count)
+
+            # Metadata - count only training failures for backward compatibility
+            training_fail_df = df[df["test_status"] == "TRAINING_FAIL"]
+            num_tests = len(training_fail_df)
             num_systems = df["host"].nunique()
             speeds = sorted(df["train_speed"].unique().tolist())
 
@@ -1027,36 +1174,75 @@ class QueryEngine:
             for lane_col in lane_columns:
                 lane_num = int(lane_col.replace("acc_ber_lane", ""))
 
-                # Process each unique bus_id/eth_id combination
-                for (bus_id, eth_id), group in df.groupby(["bus_id", "eth_id"]):
-                    lane_id = f"{bus_id}/{eth_id}/lane{lane_num}"
-
-                    # Get BER values for this lane
-                    lane_values = group[lane_col].dropna()
-
-                    if lane_values.empty:
-                        continue
-
-                    # Calculate histogram
-                    bin_counts = []
-                    for label, low, high in bins:
-                        if high == float("inf"):
-                            count = (lane_values >= low).sum()
-                        else:
-                            count = ((lane_values >= low) & (lane_values < high)).sum()
-                        bin_counts.append((label, int(count)))
-
-                    num_tests = len(lane_values)
-
-                    histograms.append(
-                        BERHistogram(
-                            lane_id=lane_id,
-                            bins=bin_counts,
-                            num_tests=num_tests,
-                            num_systems=num_systems,
-                            train_speeds=speeds,
-                        )
+                # Group by chip position or bus_id depending on mode
+                if lane_selector.normalize_by_ubb:
+                    from bh_glx_data.system_analysis.ubb_normalization import (
+                        normalize_bus_id_to_chip,
                     )
+
+                    df_copy = df.copy()
+                    df_copy["chip_position"] = df_copy["bus_id"].apply(normalize_bus_id_to_chip)
+
+                    for (chip_pos, eth_id), group in df_copy.groupby(["chip_position", "eth_id"]):
+                        lane_id = f"{chip_pos}/{eth_id}/lane{lane_num}"
+
+                        # Get BER values for this lane
+                        lane_values = group[lane_col].dropna()
+
+                        if lane_values.empty:
+                            continue
+
+                        # Calculate histogram
+                        bin_counts = []
+                        for label, low, high in bins:
+                            if high == float("inf"):
+                                count = (lane_values >= low).sum()
+                            else:
+                                count = ((lane_values >= low) & (lane_values < high)).sum()
+                            bin_counts.append((label, int(count)))
+
+                        num_tests = len(lane_values)
+
+                        histograms.append(
+                            BERHistogram(
+                                lane_id=lane_id,
+                                bins=bin_counts,
+                                num_tests=num_tests,
+                                num_systems=num_systems,
+                                train_speeds=speeds,
+                            )
+                        )
+                else:
+                    # Process each unique bus_id/eth_id combination
+                    for (bus_id, eth_id), group in df.groupby(["bus_id", "eth_id"]):
+                        lane_id = f"{bus_id}/{eth_id}/lane{lane_num}"
+
+                        # Get BER values for this lane
+                        lane_values = group[lane_col].dropna()
+
+                        if lane_values.empty:
+                            continue
+
+                        # Calculate histogram
+                        bin_counts = []
+                        for label, low, high in bins:
+                            if high == float("inf"):
+                                count = (lane_values >= low).sum()
+                            else:
+                                count = ((lane_values >= low) & (lane_values < high)).sum()
+                            bin_counts.append((label, int(count)))
+
+                        num_tests = len(lane_values)
+
+                        histograms.append(
+                            BERHistogram(
+                                lane_id=lane_id,
+                                bins=bin_counts,
+                                num_tests=num_tests,
+                                num_systems=num_systems,
+                                train_speeds=speeds,
+                            )
+                        )
 
             # Return single histogram or list based on lane_num specification
             if lane_selector.lane_num is not None and len(histograms) == 1:
@@ -1143,42 +1329,132 @@ class QueryEngine:
             for lane_col in lane_columns:
                 lane_num = int(lane_col.replace("acc_ber_lane", ""))
 
-                # Process each unique bus_id/eth_id combination
-                for (bus_id, eth_id), group in df.groupby(["bus_id", "eth_id"]):
-                    lane_id = f"{bus_id}/{eth_id}/lane{lane_num}"
+                # Group by chip position or bus_id depending on mode
+                if lane_selector.normalize_by_ubb:
+                    from bh_glx_data.system_analysis.ubb_normalization import (
+                        normalize_bus_id_to_chip,
+                    )
 
-                    # Calculate per-host statistics
-                    host_stats_list = []
-                    for host, host_group in group.groupby("host"):
-                        # Get BER values for this lane and host
-                        lane_values = host_group[lane_col].dropna()
+                    df_copy = df.copy()
+                    df_copy["chip_position"] = df_copy["bus_id"].apply(normalize_bus_id_to_chip)
 
-                        if not lane_values.empty:
-                            # Separate high BER values (>= 0.1) from normal values
-                            high_ber_mask = lane_values >= 0.1
-                            normal_values = lane_values[~high_ber_mask]
+                    for (chip_pos, eth_id), group in df_copy.groupby(["chip_position", "eth_id"]):
+                        lane_id = f"{chip_pos}/{eth_id}/lane{lane_num}"
 
-                            if normal_values.empty:
-                                # All values are high BER
-                                host_stats_list.append(
-                                    HostBERStats(
-                                        host=host,
-                                        min_ber=None,
-                                        avg_ber=None,
-                                        max_ber=None,
-                                        sample_count=len(lane_values),
+                        # Calculate per-host statistics
+                        host_stats_list = []
+                        for host, host_group in group.groupby("host"):
+                            # Get BER values for this lane and host
+                            lane_values = host_group[lane_col].dropna()
+
+                            if not lane_values.empty:
+                                # Separate high BER values (>= 0.1) from normal values
+                                high_ber_mask = lane_values >= 0.1
+                                normal_values = lane_values[~high_ber_mask]
+
+                                if normal_values.empty:
+                                    # All values are high BER
+                                    host_stats_list.append(
+                                        HostBERStats(
+                                            host=host,
+                                            min_ber=None,
+                                            avg_ber=None,
+                                            max_ber=None,
+                                            sample_count=len(lane_values),
+                                        )
                                     )
-                                )
-                            else:
-                                host_stats_list.append(
-                                    HostBERStats(
-                                        host=host,
-                                        min_ber=float(normal_values.min()),
-                                        avg_ber=float(normal_values.mean()),
-                                        max_ber=float(normal_values.max()),
-                                        sample_count=len(lane_values),
+                                else:
+                                    host_stats_list.append(
+                                        HostBERStats(
+                                            host=host,
+                                            min_ber=float(normal_values.min()),
+                                            avg_ber=float(normal_values.mean()),
+                                            max_ber=float(normal_values.max()),
+                                            sample_count=len(lane_values),
+                                        )
                                     )
-                                )
+
+                        # Calculate statistics of statistics
+                        if host_stats_list:
+                            # Extract valid min/avg/max values (excluding None)
+                            mins = [h.min_ber for h in host_stats_list if h.min_ber is not None]
+                            avgs = [h.avg_ber for h in host_stats_list if h.avg_ber is not None]
+                            maxs = [h.max_ber for h in host_stats_list if h.max_ber is not None]
+
+                            # Calculate aggregated statistics
+                            min_of_mins = float(min(mins)) if mins else None
+                            avg_of_mins = float(sum(mins) / len(mins)) if mins else None
+                            max_of_mins = float(max(mins)) if mins else None
+
+                            min_of_avgs = float(min(avgs)) if avgs else None
+                            avg_of_avgs = float(sum(avgs) / len(avgs)) if avgs else None
+                            max_of_avgs = float(max(avgs)) if avgs else None
+
+                            min_of_maxs = float(min(maxs)) if maxs else None
+                            avg_of_maxs = float(sum(maxs) / len(maxs)) if maxs else None
+                            max_of_maxs = float(max(maxs)) if maxs else None
+
+                            num_systems = len(host_stats_list)
+                        else:
+                            min_of_mins = avg_of_mins = max_of_mins = None
+                            min_of_avgs = avg_of_avgs = max_of_avgs = None
+                            min_of_maxs = avg_of_maxs = max_of_maxs = None
+                            num_systems = 0
+
+                        aggregated_stats_list.append(
+                            AggregatedHostStats(
+                                lane_id=lane_id,
+                                host_stats=host_stats_list,
+                                min_of_mins=min_of_mins,
+                                avg_of_mins=avg_of_mins,
+                                max_of_mins=max_of_mins,
+                                min_of_avgs=min_of_avgs,
+                                avg_of_avgs=avg_of_avgs,
+                                max_of_avgs=max_of_avgs,
+                                min_of_maxs=min_of_maxs,
+                                avg_of_maxs=avg_of_maxs,
+                                max_of_maxs=max_of_maxs,
+                                num_systems=num_systems,
+                                train_speeds=speeds,
+                            )
+                        )
+                else:
+                    # Normal mode: Process each unique bus_id/eth_id combination
+                    for (bus_id, eth_id), group in df.groupby(["bus_id", "eth_id"]):
+                        lane_id = f"{bus_id}/{eth_id}/lane{lane_num}"
+
+                        # Calculate per-host statistics
+                        host_stats_list = []
+                        for host, host_group in group.groupby("host"):
+                            # Get BER values for this lane and host
+                            lane_values = host_group[lane_col].dropna()
+
+                            if not lane_values.empty:
+                                # Separate high BER values (>= 0.1) from normal values
+                                high_ber_mask = lane_values >= 0.1
+                                normal_values = lane_values[~high_ber_mask]
+
+                                if normal_values.empty:
+                                    # All values are high BER
+                                    host_stats_list.append(
+                                        HostBERStats(
+                                            host=host,
+                                            min_ber=None,
+                                            avg_ber=None,
+                                            max_ber=None,
+                                            sample_count=len(lane_values),
+                                        )
+                                    )
+                                else:
+                                    host_stats_list.append(
+                                        HostBERStats(
+                                            host=host,
+                                            min_ber=float(normal_values.min()),
+                                            avg_ber=float(normal_values.mean()),
+                                            max_ber=float(normal_values.max()),
+                                            sample_count=len(lane_values),
+                                        )
+                                    )
 
                     # Calculate statistics of statistics
                     if host_stats_list:
