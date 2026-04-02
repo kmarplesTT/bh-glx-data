@@ -124,11 +124,9 @@ class ExcelExporter:
             # Create or open workbook
             wb, file_existed = create_or_open_workbook(output_path)
 
-            # Generate worksheet name: "Stats - <format> - <statistic>"
-            if format == "heatmap":
-                base_name = f"Stats - heatmap - {statistic}"
-            else:
-                base_name = "Stats - table"
+            # Generate worksheet name: "Stats - <lane_spec>"
+            base_name = f"Stats - {lane_spec}"
+            base_name = sanitize_worksheet_name(base_name)
             ws_name = generate_unique_worksheet_name(wb, base_name)
             ws = wb.create_sheet(ws_name)
 

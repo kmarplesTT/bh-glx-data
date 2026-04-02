@@ -93,11 +93,11 @@ class TestColorMapping:
 
     def test_map_terminal_color_to_excel(self):
         """Test mapping terminal colors to Excel hex colors."""
-        assert map_terminal_color_to_excel("color(28)") == "FF006400"  # Green
-        assert map_terminal_color_to_excel("color(106)") == "FF9ACD32"  # Yellow-green
+        assert map_terminal_color_to_excel("color(28)") == "FF4CAF50"  # Green
+        assert map_terminal_color_to_excel("color(106)") == "FF9DC34D"  # Yellow-green
         assert map_terminal_color_to_excel("color(184)") == "FFFFD700"  # Yellow
-        assert map_terminal_color_to_excel("color(172)") == "FFFF8C00"  # Orange
-        assert map_terminal_color_to_excel("color(124)") == "FF8B0000"  # Red
+        assert map_terminal_color_to_excel("color(172)") == "FFFFA500"  # Orange
+        assert map_terminal_color_to_excel("color(124)") == "FFDC143C"  # Red
 
     def test_map_terminal_color_unknown(self):
         """Test mapping unknown terminal color returns white."""
@@ -116,11 +116,11 @@ class TestColorMapping:
         )
 
         # Test BER values (lower is better)
-        assert get_excel_color_for_value(1e-13, scheme, is_ber_metric=True) == "FF006400"  # Green
-        assert get_excel_color_for_value(5e-11, scheme, is_ber_metric=True) == "FF9ACD32"  # Yellow-green
+        assert get_excel_color_for_value(1e-13, scheme, is_ber_metric=True) == "FF4CAF50"  # Green
+        assert get_excel_color_for_value(5e-11, scheme, is_ber_metric=True) == "FF9DC34D"  # Yellow-green
         assert get_excel_color_for_value(5e-9, scheme, is_ber_metric=True) == "FFFFD700"  # Yellow
-        assert get_excel_color_for_value(5e-7, scheme, is_ber_metric=True) == "FFFF8C00"  # Orange
-        assert get_excel_color_for_value(1e-5, scheme, is_ber_metric=True) == "FF8B0000"  # Red
+        assert get_excel_color_for_value(5e-7, scheme, is_ber_metric=True) == "FFFFA500"  # Orange
+        assert get_excel_color_for_value(1e-5, scheme, is_ber_metric=True) == "FFDC143C"  # Red
 
     def test_get_excel_color_for_count_value(self):
         """Test getting Excel color for count values."""
@@ -136,11 +136,11 @@ class TestColorMapping:
         )
 
         # Test count values (lower is better)
-        assert get_excel_color_for_value(0, scheme, is_ber_metric=False) == "FF006400"  # Green for 0
-        assert get_excel_color_for_value(5, scheme, is_ber_metric=False) == "FF9ACD32"  # Yellow-green
+        assert get_excel_color_for_value(0, scheme, is_ber_metric=False) == "FF4CAF50"  # Green for 0
+        assert get_excel_color_for_value(5, scheme, is_ber_metric=False) == "FF9DC34D"  # Yellow-green
         assert get_excel_color_for_value(30, scheme, is_ber_metric=False) == "FFFFD700"  # Yellow
-        assert get_excel_color_for_value(75, scheme, is_ber_metric=False) == "FFFF8C00"  # Orange
-        assert get_excel_color_for_value(250, scheme, is_ber_metric=False) == "FF8B0000"  # Red
+        assert get_excel_color_for_value(75, scheme, is_ber_metric=False) == "FFFFA500"  # Orange
+        assert get_excel_color_for_value(250, scheme, is_ber_metric=False) == "FFDC143C"  # Red
 
     def test_get_excel_color_for_none_value(self):
         """Test getting Excel color for None value returns white."""
@@ -169,7 +169,7 @@ class TestCellFormatting:
 
         apply_cell_background_color(cell, "color(28)")  # Green
 
-        assert cell.fill.start_color.rgb == "FF006400"
+        assert cell.fill.start_color.rgb == "FF4CAF50"
 
 
 class TestMetadataSection:

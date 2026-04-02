@@ -329,7 +329,8 @@ class TestEndToEndWorkflow:
         # Get stats
         stats = test_db.get_database_stats()
 
-        assert stats.total_tests == 4
+        assert stats.total_samples == 4  # Total rows/samples
+        assert stats.total_tests == 2  # Unique (host, date) combinations
         assert stats.unique_hosts == 2
         assert len(stats.unique_speeds) == 2
         assert "PASS" in stats.status_breakdown
@@ -348,9 +349,10 @@ class TestEndToEndWorkflow:
         result2 = ingester.ingest_directory(sample_csv_dir)
         assert result2.files_processed == 2
 
-        # Total should be double
+        # Total samples should be double, but unique tests remain the same
         stats = test_db.get_database_stats()
-        assert stats.total_tests == 8
+        assert stats.total_samples == 8  # Total rows doubled
+        assert stats.total_tests == 2  # Unique (host, date) combinations unchanged
         assert stats.total_ingestions == 2
 
 

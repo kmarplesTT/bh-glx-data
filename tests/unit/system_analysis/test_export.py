@@ -187,7 +187,7 @@ class TestExportBERStatistics:
 
         assert isinstance(result, ExcelExportResult)
         assert result.output_path == output_path
-        assert result.worksheet_name == "Stats - table"
+        assert result.worksheet_name == "Stats - all"
         assert result.rows_written == 2
         assert result.file_existed is False
 
@@ -196,9 +196,9 @@ class TestExportBERStatistics:
 
         # Verify worksheet content
         wb = load_workbook(output_path)
-        assert "Stats - table" in wb.sheetnames
+        assert "Stats - all" in wb.sheetnames
 
-        ws = wb["Stats - table"]
+        ws = wb["Stats - all"]
         # Header row (after title and spacing)
         assert ws.cell(3, 1).value == "bus_id"
         assert ws.cell(3, 2).value == "eth_id"
@@ -221,12 +221,12 @@ class TestExportBERStatistics:
             color_scheme=color_scheme,
         )
 
-        assert result.worksheet_name == "Stats - heatmap - max"
+        assert result.worksheet_name == "Stats - 01_00.0_ETH07"
         assert result.rows_written == 2
 
         # Verify heatmap structure
         wb = load_workbook(output_path)
-        ws = wb["Stats - heatmap - max"]
+        ws = wb["Stats - 01_00.0_ETH07"]
         assert ws.cell(1, 1).value  # Has header/port column
 
     def test_export_to_existing_file(self, exporter, sample_ber_statistics, tmp_path):
@@ -245,10 +245,10 @@ class TestExportBERStatistics:
         )
         assert result2.file_existed is True
 
-        # Verify both worksheets exist (both named "Stats - table" with collision numbering)
+        # Verify both worksheets exist with different lane_spec names
         wb = load_workbook(output_path)
-        assert "Stats - table" in wb.sheetnames
-        assert "Stats - table (2)" in wb.sheetnames
+        assert "Stats - all" in wb.sheetnames
+        assert "Stats - 01_00.0__" in wb.sheetnames  # Sanitized from "01:00.0/*"
 
     def test_export_worksheet_name_collision(self, exporter, sample_ber_statistics, tmp_path):
         """Test handling worksheet name collisions."""
@@ -265,9 +265,9 @@ class TestExportBERStatistics:
             sample_ber_statistics, output_path, lane_spec="all"
         )
 
-        assert result1.worksheet_name == "Stats - table"
-        assert result2.worksheet_name == "Stats - table (2)"
-        assert result3.worksheet_name == "Stats - table (3)"
+        assert result1.worksheet_name == "Stats - all"
+        assert result2.worksheet_name == "Stats - all (2)"
+        assert result3.worksheet_name == "Stats - all (3)"
 
 
 class TestExportCountData:
@@ -352,11 +352,11 @@ class TestExportHistogram:
 
         result = exporter.export_histogram(sample_histogram, output_path, lane_spec="01:00.0/ETH07/0")
 
-        assert result.worksheet_name == "Histogram - chart"
+        assert result.worksheet_name == "Hist - 01_00.0_ETH07_0"
         assert result.rows_written == 4  # 4 bins
 
         wb = load_workbook(output_path)
-        ws = wb["Histogram - chart"]
+        ws = wb["Hist - 01_00.0_ETH07_0"]
 
         # Check histogram title (contains lane_spec)
         assert "01:00.0/ETH07/0" in str(ws.cell(1, 1).value)
@@ -391,7 +391,7 @@ class TestExportHistogram:
         assert result.rows_written == 2  # 2 bins total
 
         wb = load_workbook(output_path)
-        ws = wb["Histogram - chart"]
+        ws = wb["Hist - all"]
 
         # Both histograms should be present
         found_lane0 = False
@@ -418,13 +418,13 @@ class TestExportAdvancedStats:
             sample_aggregated_stats, output_path, lane_spec="01:00.0/ETH07/0"
         )
 
-        # New format doesn't include lane_spec
-        assert result.worksheet_name == "Advanced Stats - table"
+        # Worksheet name includes sanitized lane_spec
+        assert result.worksheet_name == "Adv Stats - 01_00.0_ETH07_0"
         # 2 host rows + 3 stats-of-stats rows
         assert result.rows_written == 5
 
         wb = load_workbook(output_path)
-        ws = wb["Advanced Stats - table"]
+        ws = wb["Adv Stats - 01_00.0_ETH07_0"]
 
         # Check per-host table
         assert "Per-Host Statistics" in str(ws.cell(3, 1).value)
